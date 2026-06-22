@@ -7,7 +7,7 @@
   "properties": [
     {
       "identifier": "temperature",
-      "functionType": "property",
+      "functionType": "u",
       "name": "空气温度",
       "dataType": "float",
       "unit": "°C",
@@ -21,7 +21,7 @@
     },
     {
       "identifier": "airHumidity",
-      "functionType": "property",
+      "functionType": "u",
       "name": "空气湿度",
       "dataType": "float",
       "unit": "%",
@@ -35,7 +35,7 @@
     },
     {
       "identifier": "lightValue",
-      "functionType": "property",
+      "functionType": "u",
       "name": "光照原始值",
       "dataType": "int",
       "unit": "ADC",
@@ -49,7 +49,7 @@
     },
     {
       "identifier": "lightStatus",
-      "functionType": "property",
+      "functionType": "u",
       "name": "光照状态",
       "dataType": "string",
       "accessMode": "read",
@@ -60,7 +60,7 @@
     },
     {
       "identifier": "rainDetected",
-      "functionType": "property",
+      "functionType": "u",
       "name": "是否下雨",
       "dataType": "bool",
       "accessMode": "read",
@@ -72,7 +72,7 @@
     },
     {
       "identifier": "vibrationDetected",
-      "functionType": "property",
+      "functionType": "u",
       "name": "当前振动",
       "dataType": "bool",
       "accessMode": "read",
@@ -84,7 +84,7 @@
     },
     {
       "identifier": "maintenanceEvent",
-      "functionType": "property",
+      "functionType": "u",
       "name": "维护事件",
       "dataType": "bool",
       "accessMode": "read",
@@ -96,7 +96,7 @@
     },
     {
       "identifier": "irrigationState",
-      "functionType": "property",
+      "functionType": "u",
       "name": "滴灌状态",
       "dataType": "bool",
       "accessMode": "read",
@@ -108,7 +108,7 @@
     },
     {
       "identifier": "servoAngle",
-      "functionType": "property",
+      "functionType": "u",
       "name": "舵机角度",
       "dataType": "int",
       "unit": "°",
@@ -124,7 +124,7 @@
   "services": [
     {
       "identifier": "setIrrigationMode",
-      "functionType": "service",
+      "functionType": "u",
       "name": "设置滴灌模式",
       "callType": "async",
       "description": "Reserved for the next iteration. Cloud can switch between auto and manual irrigation control.",
@@ -162,7 +162,7 @@
     },
     {
       "identifier": "setHumidityThreshold",
-      "functionType": "service",
+      "functionType": "u",
       "name": "设置湿度阈值",
       "callType": "async",
       "description": "Reserved for the next iteration. Cloud can change irrigation open and close thresholds.",
@@ -206,7 +206,7 @@
   "events": [
     {
       "identifier": "lightAlert",
-      "functionType": "event",
+      "functionType": "u",
       "name": "光照异常",
       "eventType": "alert",
       "description": "Reserved event for low or high light alert display.",
@@ -234,7 +234,7 @@
     },
     {
       "identifier": "maintenanceAlert",
-      "functionType": "event",
+      "functionType": "u",
       "name": "维护/振动事件",
       "eventType": "info",
       "description": "Reserved event for pruning, maintenance, or abnormal vibration.",
