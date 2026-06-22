@@ -22,7 +22,6 @@
 - `DHT sensor library` by Adafruit
 - `Adafruit Unified Sensor`
 - `PubSubClient` by Nick O'Leary
-- `ESP32Servo`
 
 还需要安装 ESP32 开发板支持包，并选择你的 ESP32-C6 开发板型号。
 

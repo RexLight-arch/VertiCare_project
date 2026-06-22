@@ -2,20 +2,20 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
-#include <ESP32Servo.h>
 
 #include "config.h"
 
 DHT dht(DHT_PIN, DHT11);
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
-Servo irrigationServo;
 
 struct SensorData {
   float temperature;
   float airHumidity;
   int lightValue;
   int rainValue;
+  int rainDigitalValue;
+  int vibrationDigitalValue;
   bool rainDetected;
   bool vibrationDetected;
 };
@@ -43,6 +43,8 @@ void readSensors();
 void updateControl();
 void publishTelemetry();
 void applyServo(bool irrigationOn);
+void setupServoPwm();
+void writeServoAngle(int angle);
 const char *classifyLight(int value);
 String buildTelemetryJson();
 String buildOneNetPropertyPayload();
@@ -51,17 +53,18 @@ void setup() {
   Serial.begin(115200);
   delay(300);
 
-  pinMode(VIBRATION_PIN, INPUT);
-  pinMode(RAIN_DIGITAL_PIN, INPUT);
+  pinMode(VIBRATION_PIN, VIBRATION_USE_PULLUP ? INPUT_PULLUP : INPUT);
+  pinMode(RAIN_DIGITAL_PIN, RAIN_DIGITAL_USE_PULLUP ? INPUT_PULLUP : INPUT);
 
   dht.begin();
-  irrigationServo.setPeriodHertz(50);
-  irrigationServo.attach(SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
+  setupServoPwm();
 
   latestData.temperature = 0.0;
   latestData.airHumidity = 0.0;
   latestData.lightValue = 0;
   latestData.rainValue = 0;
+  latestData.rainDigitalValue = HIGH;
+  latestData.vibrationDigitalValue = HIGH;
   latestData.rainDetected = false;
   latestData.vibrationDetected = false;
   latestState.irrigationOn = false;
@@ -169,11 +172,16 @@ void readSensors() {
   latestData.lightValue = analogRead(LIGHT_ADC_PIN);
   latestData.rainValue = analogRead(RAIN_ADC_PIN);
 
-  bool rainDigitalActive = digitalRead(RAIN_DIGITAL_PIN) == RAIN_DIGITAL_ACTIVE_LEVEL;
-  bool rainAnalogActive = latestData.rainValue <= RAIN_WET_ADC_THRESHOLD;
-  latestData.rainDetected = rainDigitalActive || rainAnalogActive;
+  latestData.rainDigitalValue = digitalRead(RAIN_DIGITAL_PIN);
+  latestData.vibrationDigitalValue = digitalRead(VIBRATION_PIN);
 
-  bool vibrationActive = digitalRead(VIBRATION_PIN) == VIBRATION_ACTIVE_LEVEL;
+  bool rainDigitalActive = latestData.rainDigitalValue == RAIN_DIGITAL_ACTIVE_LEVEL;
+  bool rainAnalogActive = RAIN_ANALOG_WET_WHEN_LOW
+                              ? latestData.rainValue <= RAIN_WET_ADC_THRESHOLD
+                              : latestData.rainValue >= RAIN_WET_ADC_THRESHOLD;
+  latestData.rainDetected = (RAIN_USE_DIGITAL && rainDigitalActive) || (RAIN_USE_ANALOG && rainAnalogActive);
+
+  bool vibrationActive = latestData.vibrationDigitalValue == VIBRATION_ACTIVE_LEVEL;
   latestData.vibrationDetected = vibrationActive;
 
   unsigned long now = millis();
@@ -210,8 +218,14 @@ void updateControl() {
   Serial.print(latestData.airHumidity, 1);
   Serial.print(F("% Light="));
   Serial.print(latestData.lightValue);
+  Serial.print(F(" RainADC="));
+  Serial.print(latestData.rainValue);
+  Serial.print(F(" RainDO="));
+  Serial.print(latestData.rainDigitalValue);
   Serial.print(F(" Rain="));
   Serial.print(latestData.rainDetected ? F("yes") : F("no"));
+  Serial.print(F(" VibDO="));
+  Serial.print(latestData.vibrationDigitalValue);
   Serial.print(F(" Vib="));
   Serial.print(latestData.vibrationDetected ? F("yes") : F("no"));
   Serial.print(F(" Irrigation="));
@@ -232,10 +246,33 @@ void publishTelemetry() {
 
 void applyServo(bool irrigationOn) {
   int angle = irrigationOn ? SERVO_OPEN_ANGLE : SERVO_CLOSE_ANGLE;
-  irrigationServo.write(angle);
+  writeServoAngle(angle);
+}
+
+void setupServoPwm() {
+  ledcAttach(SERVO_PIN, SERVO_PWM_FREQ_HZ, SERVO_PWM_RESOLUTION_BITS);
+}
+
+void writeServoAngle(int angle) {
+  angle = constrain(angle, 0, 180);
+  int pulseUs = map(angle, 0, 180, SERVO_MIN_US, SERVO_MAX_US);
+  uint32_t maxDuty = (1UL << SERVO_PWM_RESOLUTION_BITS) - 1;
+  uint32_t duty = (uint32_t)((uint64_t)pulseUs * maxDuty / SERVO_PWM_PERIOD_US);
+
+  ledcWrite(SERVO_PIN, duty);
 }
 
 const char *classifyLight(int value) {
+  if (LIGHT_ADC_HIGH_MEANS_DARK) {
+    if (value >= LIGHT_DARK_THRESHOLD) {
+      return "low";
+    }
+    if (value <= LIGHT_BRIGHT_THRESHOLD) {
+      return "high";
+    }
+    return "normal";
+  }
+
   if (value < LIGHT_LOW_THRESHOLD) {
     return "low";
   }

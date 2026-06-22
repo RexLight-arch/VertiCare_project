@@ -38,7 +38,9 @@ static const uint8_t SERVO_PIN = 10;
 
 // Module active levels. Change these if your module reports the opposite logic.
 static const uint8_t RAIN_DIGITAL_ACTIVE_LEVEL = LOW;
-static const uint8_t VIBRATION_ACTIVE_LEVEL = HIGH;
+static const uint8_t VIBRATION_ACTIVE_LEVEL = LOW;
+static const bool RAIN_DIGITAL_USE_PULLUP = true;
+static const bool VIBRATION_USE_PULLUP = true;
 
 // Sampling and upload intervals.
 static const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
@@ -51,10 +53,20 @@ static const float AIR_HUMIDITY_OPEN_THRESHOLD = 45.0;
 static const float AIR_HUMIDITY_CLOSE_THRESHOLD = 60.0;
 static const int LIGHT_LOW_THRESHOLD = 1200;
 static const int LIGHT_HIGH_THRESHOLD = 3200;
-static const int RAIN_WET_ADC_THRESHOLD = 1800;
+static const bool LIGHT_ADC_HIGH_MEANS_DARK = true;
+static const int LIGHT_BRIGHT_THRESHOLD = 1200;
+static const int LIGHT_DARK_THRESHOLD = 3200;
+static const int RAIN_WET_ADC_THRESHOLD = 500;
+static const bool RAIN_USE_ANALOG = true;
+static const bool RAIN_USE_DIGITAL = false;
+static const bool RAIN_ANALOG_WET_WHEN_LOW = true;
 
 // SG90 servo angles.
 static const int SERVO_CLOSE_ANGLE = 0;
 static const int SERVO_OPEN_ANGLE = 90;
 static const int SERVO_MIN_US = 500;
 static const int SERVO_MAX_US = 2500;
+static const int SERVO_PWM_FREQ_HZ = 50;
+static const int SERVO_PWM_RESOLUTION_BITS = 16;
+static const int SERVO_PWM_PERIOD_US = 20000;
+static const int SERVO_LEDC_CHANNEL = 0;
