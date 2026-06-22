@@ -9,116 +9,134 @@
       "identifier": "temperature",
       "functionType": "u",
       "name": "空气温度",
-      "dataType": "float",
-      "unit": "°C",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": -20,
+          "max": 80,
+          "step": 0.1
+        },
+        "unit": "°C"
+      },
       "accessMode": "read",
-      "description": "DHT11 measured ambient air temperature.",
-      "specs": {
-        "min": -20,
-        "max": 80,
-        "step": 0.1
-      }
+      "description": "DHT11 measured ambient air temperature."
     },
     {
       "identifier": "airHumidity",
       "functionType": "u",
       "name": "空气湿度",
-      "dataType": "float",
-      "unit": "%",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        "unit": "%"
+      },
       "accessMode": "read",
-      "description": "DHT11 measured ambient air humidity, used by the demo as the irrigation control input.",
-      "specs": {
-        "min": 0,
-        "max": 100,
-        "step": 0.1
-      }
+      "description": "DHT11 measured ambient air humidity, used by the demo as the irrigation control input."
     },
     {
       "identifier": "lightValue",
       "functionType": "u",
       "name": "光照原始值",
-      "dataType": "int",
-      "unit": "ADC",
+      "dataType": {
+        "type": "int",
+        "specs": {
+          "min": 0,
+          "max": 4095,
+          "step": 1
+        },
+        "unit": "ADC"
+      },
       "accessMode": "read",
-      "description": "Photoresistor ADC raw value.",
-      "specs": {
-        "min": 0,
-        "max": 4095,
-        "step": 1
-      }
+      "description": "Photoresistor ADC raw value."
     },
     {
       "identifier": "lightStatus",
       "functionType": "u",
       "name": "光照状态",
-      "dataType": "string",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "maxLength": 16
+        }
+      },
       "accessMode": "read",
-      "description": "Classified light level: low, normal, or high.",
-      "specs": {
-        "maxLength": 16
-      }
+      "description": "Classified light level: low, normal, or high."
     },
     {
       "identifier": "rainDetected",
       "functionType": "u",
       "name": "是否下雨",
-      "dataType": "bool",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "无雨",
+          "true": "有雨"
+        }
+      },
       "accessMode": "read",
-      "description": "Rain module wet/dry detection result.",
-      "specs": {
-        "false": "无雨",
-        "true": "有雨"
-      }
+      "description": "Rain module wet/dry detection result."
     },
     {
       "identifier": "vibrationDetected",
       "functionType": "u",
       "name": "当前振动",
-      "dataType": "bool",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "无振动",
+          "true": "有振动"
+        }
+      },
       "accessMode": "read",
-      "description": "Current SW-420 vibration digital state.",
-      "specs": {
-        "false": "无振动",
-        "true": "有振动"
-      }
+      "description": "Current SW-420 vibration digital state."
     },
     {
       "identifier": "maintenanceEvent",
       "functionType": "u",
       "name": "维护事件",
-      "dataType": "bool",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "未触发",
+          "true": "已触发"
+        }
+      },
       "accessMode": "read",
-      "description": "A debounced vibration/maintenance event held for a short display window.",
-      "specs": {
-        "false": "未触发",
-        "true": "已触发"
-      }
+      "description": "A debounced vibration/maintenance event held for a short display window."
     },
     {
       "identifier": "irrigationState",
       "functionType": "u",
       "name": "滴灌状态",
-      "dataType": "bool",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "关闭",
+          "true": "开启"
+        }
+      },
       "accessMode": "read",
-      "description": "SG90 simulated irrigation valve state.",
-      "specs": {
-        "false": "关闭",
-        "true": "开启"
-      }
+      "description": "SG90 simulated irrigation valve state."
     },
     {
       "identifier": "servoAngle",
       "functionType": "u",
       "name": "舵机角度",
-      "dataType": "int",
-      "unit": "°",
+      "dataType": {
+        "type": "int",
+        "specs": {
+          "min": 0,
+          "max": 180,
+          "step": 1
+        },
+        "unit": "°"
+      },
       "accessMode": "read",
-      "description": "SG90 servo angle. 0 means closed, 90 means open in the default demo.",
-      "specs": {
-        "min": 0,
-        "max": 180,
-        "step": 1
-      }
+      "description": "SG90 servo angle. 0 means closed, 90 means open in the default demo."
     }
   ],
   "services": [
@@ -132,19 +150,23 @@
         {
           "identifier": "mode",
           "name": "控制模式",
-          "dataType": "enum",
-          "specs": {
-            "0": "auto",
-            "1": "manual"
+          "dataType": {
+            "type": "enum",
+            "specs": {
+              "0": "auto",
+              "1": "manual"
+            }
           }
         },
         {
           "identifier": "manualIrrigation",
           "name": "手动滴灌开关",
-          "dataType": "bool",
-          "specs": {
-            "false": "关闭",
-            "true": "开启"
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "关闭",
+              "true": "开启"
+            }
           }
         }
       ],
@@ -152,10 +174,12 @@
         {
           "identifier": "result",
           "name": "执行结果",
-          "dataType": "bool",
-          "specs": {
-            "false": "失败",
-            "true": "成功"
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "失败",
+              "true": "成功"
+            }
           }
         }
       ]
@@ -170,23 +194,27 @@
         {
           "identifier": "openThreshold",
           "name": "开启阈值",
-          "dataType": "float",
-          "unit": "%",
-          "specs": {
-            "min": 0,
-            "max": 100,
-            "step": 0.1
+          "dataType": {
+            "type": "float",
+            "specs": {
+              "min": 0,
+              "max": 100,
+              "step": 0.1
+            },
+            "unit": "%"
           }
         },
         {
           "identifier": "closeThreshold",
           "name": "关闭阈值",
-          "dataType": "float",
-          "unit": "%",
-          "specs": {
-            "min": 0,
-            "max": 100,
-            "step": 0.1
+          "dataType": {
+            "type": "float",
+            "specs": {
+              "min": 0,
+              "max": 100,
+              "step": 0.1
+            },
+            "unit": "%"
           }
         }
       ],
@@ -194,10 +222,12 @@
         {
           "identifier": "result",
           "name": "执行结果",
-          "dataType": "bool",
-          "specs": {
-            "false": "失败",
-            "true": "成功"
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "失败",
+              "true": "成功"
+            }
           }
         }
       ]
@@ -214,20 +244,24 @@
         {
           "identifier": "lightValue",
           "name": "光照原始值",
-          "dataType": "int",
-          "unit": "ADC",
-          "specs": {
-            "min": 0,
-            "max": 4095,
-            "step": 1
+          "dataType": {
+            "type": "int",
+            "specs": {
+              "min": 0,
+              "max": 4095,
+              "step": 1
+            },
+            "unit": "ADC"
           }
         },
         {
           "identifier": "lightStatus",
           "name": "光照状态",
-          "dataType": "string",
-          "specs": {
-            "maxLength": 16
+          "dataType": {
+            "type": "string",
+            "specs": {
+              "maxLength": 16
+            }
           }
         }
       ]
@@ -242,10 +276,12 @@
         {
           "identifier": "vibrationDetected",
           "name": "当前振动",
-          "dataType": "bool",
-          "specs": {
-            "false": "无振动",
-            "true": "有振动"
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "无振动",
+              "true": "有振动"
+            }
           }
         }
       ]
