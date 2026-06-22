@@ -1,0 +1,60 @@
+#pragma once
+
+// Copy this file to config.h, then fill in your WiFi and OneNet credentials.
+
+// WiFi
+static const char *WIFI_SSID = "YOUR_WIFI_SSID";
+static const char *WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+static const unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+
+// Device identity
+static const char *DEVICE_ID = "verticare_01";
+
+// OneNet MQTT.
+// For OneNet new platform MQTT, common settings are:
+// host: mqtts.heclouds.com
+// port: 1883
+// clientId: device name
+// username: product id
+// password: device token or platform-generated MQTT password/token
+static const char *MQTT_HOST = "mqtts.heclouds.com";
+static const uint16_t MQTT_PORT = 1883;
+static const char *MQTT_CLIENT_ID = "YOUR_DEVICE_NAME";
+static const char *MQTT_USERNAME = "YOUR_PRODUCT_ID";
+static const char *MQTT_PASSWORD = "YOUR_DEVICE_TOKEN";
+static const int MQTT_BUFFER_SIZE = 768;
+
+// Replace product id and device name after creating the OneNet device.
+static const char *ONENET_PROPERTY_POST_TOPIC =
+    "$sys/YOUR_PRODUCT_ID/YOUR_DEVICE_NAME/thing/property/post";
+
+// GPIO pin map. Adjust these pins according to your ESP32-C6 board silkscreen.
+static const uint8_t DHT_PIN = 4;
+static const uint8_t LIGHT_ADC_PIN = 0;
+static const uint8_t RAIN_ADC_PIN = 1;
+static const uint8_t RAIN_DIGITAL_PIN = 5;
+static const uint8_t VIBRATION_PIN = 6;
+static const uint8_t SERVO_PIN = 10;
+
+// Module active levels. Change these if your module reports the opposite logic.
+static const uint8_t RAIN_DIGITAL_ACTIVE_LEVEL = LOW;
+static const uint8_t VIBRATION_ACTIVE_LEVEL = HIGH;
+
+// Sampling and upload intervals.
+static const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
+static const unsigned long MQTT_PUBLISH_INTERVAL_MS = 5000;
+static const unsigned long VIBRATION_DEBOUNCE_MS = 800;
+static const unsigned long MAINTENANCE_EVENT_HOLD_MS = 10000;
+
+// Thresholds. Tune these with Serial Monitor readings after wiring.
+static const float AIR_HUMIDITY_OPEN_THRESHOLD = 45.0;
+static const float AIR_HUMIDITY_CLOSE_THRESHOLD = 60.0;
+static const int LIGHT_LOW_THRESHOLD = 1200;
+static const int LIGHT_HIGH_THRESHOLD = 3200;
+static const int RAIN_WET_ADC_THRESHOLD = 1800;
+
+// SG90 servo angles.
+static const int SERVO_CLOSE_ANGLE = 0;
+static const int SERVO_OPEN_ANGLE = 90;
+static const int SERVO_MIN_US = 500;
+static const int SERVO_MAX_US = 2500;
