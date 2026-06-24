@@ -1,0 +1,164 @@
+package com.verticare.bridge;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.Schema;
+import org.apache.pulsar.client.api.SubscriptionType;
+
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
+import java.io.FileInputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
+
+public final class BridgeMain {
+    private static final String DEFAULT_BROKER =
+            "pulsar+ssl://iot-north-mq.heclouds.com:6651/";
+
+    private BridgeMain() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length != 1) {
+            System.err.println("Usage: java -jar verticare-bridge.jar bridge.properties");
+            System.exit(2);
+        }
+
+        Properties config = new Properties();
+        try (FileInputStream input = new FileInputStream(args[0])) {
+            config.load(input);
+        }
+
+        String accessId = required(config, "consumerGroupId");
+        String secretKey = required(config, "consumerGroupKey");
+        String subscriptionName = required(config, "subscriptionName");
+        String productId = config.getProperty("productId", "").trim();
+        String deviceName = config.getProperty("deviceName", "").trim();
+        String broker = config.getProperty("brokerUrl", DEFAULT_BROKER).trim();
+        String topic = config.getProperty("topic", accessId + "/iot/event").trim();
+
+        PulsarClient client = PulsarClient.builder()
+                .serviceUrl(broker)
+                .allowTlsInsecureConnection(true)
+                .authentication(new OneNetAuthentication(accessId, secretKey))
+                .build();
+
+        Consumer<String> consumer = client.newConsumer(Schema.STRING)
+                .topic(topic)
+                .subscriptionName(subscriptionName)
+                .subscriptionType(SubscriptionType.Failover)
+                .autoUpdatePartitions(false)
+                .subscribe();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                consumer.close();
+                client.close();
+            } catch (Exception ignored) {
+            }
+        }));
+
+        Thread parentMonitor = new Thread(() -> {
+            try {
+                while (System.in.read() != -1) {
+                    // Keep waiting while the Qt parent process owns the pipe.
+                }
+            } catch (Exception ignored) {
+            }
+            System.exit(0);
+        }, "qt-parent-monitor");
+        parentMonitor.setDaemon(true);
+        parentMonitor.start();
+
+        System.err.println("VertiCare bridge connected: " + topic);
+        while (true) {
+            Message<String> message = consumer.receive();
+            try {
+                JSONObject envelope = JSON.parseObject(message.getValue());
+                if (!verifySignature(envelope, secretKey)) {
+                    System.err.println("Dropped message with invalid signature.");
+                    consumer.negativeAcknowledge(message);
+                    continue;
+                }
+
+                String decrypted = decrypt(envelope.getString("data"),
+                        secretKey.substring(8, 24));
+                JSONObject event = JSON.parseObject(decrypted);
+                if (!"thingProperty".equals(event.getString("msgType"))) {
+                    consumer.acknowledge(message);
+                    continue;
+                }
+
+                JSONObject subData = event.getJSONObject("subData");
+                if (subData == null
+                        || (!productId.isEmpty()
+                        && !productId.equals(subData.getString("productId")))
+                        || (!deviceName.isEmpty()
+                        && !deviceName.equals(subData.getString("deviceName")))) {
+                    consumer.acknowledge(message);
+                    continue;
+                }
+
+                JSONObject output = new JSONObject();
+                output.put("type", "telemetry");
+                output.put("productId", subData.getString("productId"));
+                output.put("deviceName", subData.getString("deviceName"));
+                output.put("params", subData.getJSONObject("params"));
+                System.out.println(output.toJSONString());
+                System.out.flush();
+                consumer.acknowledge(message);
+            } catch (Exception exception) {
+                System.err.println("Message processing failed: " + exception.getMessage());
+                consumer.negativeAcknowledge(message);
+            }
+        }
+    }
+
+    private static String required(Properties config, String key) {
+        String value = config.getProperty(key, "").trim();
+        if (value.isEmpty())
+            throw new IllegalArgumentException("Missing config: " + key);
+        return value;
+    }
+
+    private static boolean verifySignature(JSONObject envelope, String secretKey)
+            throws Exception {
+        String expected = envelope.getString("sign");
+        if (expected == null || expected.isEmpty())
+            return false;
+
+        List<String> keys = new ArrayList<>(envelope.keySet());
+        keys.remove("sign");
+        Collections.sort(keys);
+        StringBuilder source = new StringBuilder();
+        for (String key : keys) {
+            if (source.length() > 0)
+                source.append("||");
+            source.append(key).append('=').append(envelope.get(key));
+        }
+        source.append("||").append(secretKey);
+
+        byte[] digest = MessageDigest.getInstance("MD5")
+                .digest(source.toString().getBytes(StandardCharsets.UTF_8));
+        StringBuilder actual = new StringBuilder();
+        for (byte value : digest)
+            actual.append(String.format("%02x", value & 0xff));
+        return actual.toString().equalsIgnoreCase(expected);
+    }
+
+    private static String decrypt(String encrypted, String aesKey) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE,
+                new SecretKeySpec(aesKey.getBytes(StandardCharsets.UTF_8), "AES"));
+        byte[] plain = cipher.doFinal(Base64.getDecoder().decode(encrypted));
+        return new String(plain, StandardCharsets.UTF_8);
+    }
+}

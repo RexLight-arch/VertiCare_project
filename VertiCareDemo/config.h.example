@@ -22,11 +22,15 @@ static const uint16_t MQTT_PORT = 1883;
 static const char *MQTT_CLIENT_ID = "YOUR_DEVICE_NAME";
 static const char *MQTT_USERNAME = "YOUR_PRODUCT_ID";
 static const char *MQTT_PASSWORD = "YOUR_DEVICE_TOKEN";
-static const int MQTT_BUFFER_SIZE = 768;
+static const int MQTT_BUFFER_SIZE = 1024;
 
 // Replace product id and device name after creating the OneNet device.
 static const char *ONENET_PROPERTY_POST_TOPIC =
     "$sys/YOUR_PRODUCT_ID/YOUR_DEVICE_NAME/thing/property/post";
+static const char *ONENET_PROPERTY_SET_TOPIC =
+    "$sys/YOUR_PRODUCT_ID/YOUR_DEVICE_NAME/thing/property/set";
+static const char *ONENET_PROPERTY_SET_REPLY_TOPIC =
+    "$sys/YOUR_PRODUCT_ID/YOUR_DEVICE_NAME/thing/property/set_reply";
 
 // GPIO pin map. Adjust these pins according to your ESP32-C6 board silkscreen.
 static const uint8_t DHT_PIN = 4;
@@ -45,10 +49,15 @@ static const bool VIBRATION_USE_PULLUP = true;
 // Sampling and upload intervals.
 static const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
 static const unsigned long MQTT_PUBLISH_INTERVAL_MS = 5000;
-static const unsigned long VIBRATION_DEBOUNCE_MS = 800;
+// SW-420 pulse filtering. GPIO interrupt captures short LOW pulses.
+static const unsigned long VIBRATION_PULSE_DEBOUNCE_US = 30000;
+static const unsigned long VIBRATION_WINDOW_MS = 2000;
+static const uint8_t VIBRATION_MIN_PULSES = 2;
 static const unsigned long MAINTENANCE_EVENT_HOLD_MS = 10000;
 
 // Thresholds. Tune these with Serial Monitor readings after wiring.
+static const int CONTROL_MODE_AUTO = 0;
+static const int CONTROL_MODE_MANUAL = 1;
 static const float AIR_HUMIDITY_OPEN_THRESHOLD = 45.0;
 static const float AIR_HUMIDITY_CLOSE_THRESHOLD = 60.0;
 static const int LIGHT_LOW_THRESHOLD = 1200;
@@ -56,7 +65,14 @@ static const int LIGHT_HIGH_THRESHOLD = 3200;
 static const bool LIGHT_ADC_HIGH_MEANS_DARK = true;
 static const int LIGHT_BRIGHT_THRESHOLD = 1200;
 static const int LIGHT_DARK_THRESHOLD = 3200;
-static const int RAIN_WET_ADC_THRESHOLD = 500;
+// Rain detection calibrates its dry baseline after startup.
+// With RAIN_ANALOG_WET_WHEN_LOW=true, rain is confirmed only after the ADC
+// drops far enough below that baseline.
+static const uint8_t RAIN_BASELINE_CALIBRATION_SAMPLES = 5;
+static const int RAIN_WET_DROP_FROM_BASELINE = 250;
+static const int RAIN_DRY_DROP_FROM_BASELINE = 100;
+static const uint8_t RAIN_ADC_SAMPLE_COUNT = 9;
+static const uint8_t RAIN_STATE_CONFIRM_SAMPLES = 4;
 static const bool RAIN_USE_ANALOG = true;
 static const bool RAIN_USE_DIGITAL = false;
 static const bool RAIN_ANALOG_WET_WHEN_LOW = true;

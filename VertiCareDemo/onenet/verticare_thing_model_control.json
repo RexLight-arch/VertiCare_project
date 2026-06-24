@@ -1,0 +1,351 @@
+{
+  "profile": {
+    "productName": "VertiCare",
+    "category": "vertical_greening_manager",
+    "description": "VertiCare vertical greening manager demo thing model for ESP32-C6, DHT11, photoresistor, rain sensor, SW-420 vibration sensor, and SG90 servo irrigation."
+  },
+  "properties": [
+    {
+      "identifier": "temperature",
+      "functionType": "u",
+      "name": "空气温度",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": -20,
+          "max": 80,
+          "step": 0.1
+        }
+      },
+      "accessMode": "r",
+      "description": "DHT11 measured ambient air temperature.",
+      "unit": "°C"
+    },
+    {
+      "identifier": "airHumidity",
+      "functionType": "u",
+      "name": "空气湿度",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        }
+      },
+      "accessMode": "r",
+      "description": "DHT11 measured ambient air humidity, used by the demo as the irrigation control input.",
+      "unit": "%"
+    },
+    {
+      "identifier": "lightValue",
+      "functionType": "u",
+      "name": "光照原始值",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 4095,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "Photoresistor ADC raw value.",
+      "unit": "ADC"
+    },
+    {
+      "identifier": "lightStatus",
+      "functionType": "u",
+      "name": "光照状态",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 16
+        }
+      },
+      "accessMode": "r",
+      "description": "Classified light level: low, normal, or high."
+    },
+    {
+      "identifier": "rainDetected",
+      "functionType": "u",
+      "name": "是否下雨",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "无雨",
+          "true": "有雨"
+        }
+      },
+      "accessMode": "r",
+      "description": "Rain module wet/dry detection result."
+    },
+    {
+      "identifier": "vibrationDetected",
+      "functionType": "u",
+      "name": "当前振动",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "无振动",
+          "true": "有振动"
+        }
+      },
+      "accessMode": "r",
+      "description": "Current SW-420 vibration digital state."
+    },
+    {
+      "identifier": "maintenanceEvent",
+      "functionType": "u",
+      "name": "维护事件",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "未触发",
+          "true": "已触发"
+        }
+      },
+      "accessMode": "r",
+      "description": "A debounced vibration/maintenance event held for a short display window."
+    },
+    {
+      "identifier": "irrigationState",
+      "functionType": "u",
+      "name": "滴灌状态",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "关闭",
+          "true": "开启"
+        }
+      },
+      "accessMode": "r",
+      "description": "SG90 simulated irrigation valve state."
+    },
+    {
+      "identifier": "servoAngle",
+      "functionType": "u",
+      "name": "舵机角度",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 180,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "SG90 servo angle. 0 means closed, 90 means open in the default demo.",
+      "unit": "°"
+    },
+    {
+      "identifier": "controlMode",
+      "functionType": "u",
+      "name": "控制模式",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 1,
+          "step": 1
+        }
+      },
+      "accessMode": "rw",
+      "description": "Irrigation control mode. 0 means auto, 1 means manual."
+    },
+    {
+      "identifier": "manualIrrigation",
+      "functionType": "u",
+      "name": "手动滴灌开关",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "关闭",
+          "true": "开启"
+        }
+      },
+      "accessMode": "rw",
+      "description": "Manual irrigation switch used when controlMode is manual."
+    },
+    {
+      "identifier": "openThreshold",
+      "functionType": "u",
+      "name": "开启阈值",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        }
+      },
+      "accessMode": "rw",
+      "description": "Air humidity threshold for opening irrigation in auto mode.",
+      "unit": "%"
+    },
+    {
+      "identifier": "closeThreshold",
+      "functionType": "u",
+      "name": "关闭阈值",
+      "dataType": {
+        "type": "float",
+        "specs": {
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        }
+      },
+      "accessMode": "rw",
+      "description": "Air humidity threshold for closing irrigation in auto mode.",
+      "unit": "%"
+    }
+  ],
+  "services": [
+    {
+      "identifier": "setIrrigationMode",
+      "functionType": "u",
+      "name": "设置滴灌模式",
+      "callType": "async",
+      "description": "Cloud service for switching auto/manual irrigation control and manual irrigation state.",
+      "input": [
+        {
+          "identifier": "mode",
+          "name": "控制模式",
+          "dataType": {
+            "type": "enum",
+            "specs": {
+              "0": "auto",
+              "1": "manual"
+            }
+          }
+        },
+        {
+          "identifier": "manualIrrigation",
+          "name": "手动滴灌开关",
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "关闭",
+              "true": "开启"
+            }
+          }
+        }
+      ],
+      "output": [
+        {
+          "identifier": "result",
+          "name": "执行结果",
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "失败",
+              "true": "成功"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "identifier": "setHumidityThreshold",
+      "functionType": "u",
+      "name": "设置湿度阈值",
+      "callType": "async",
+      "description": "Cloud service for changing irrigation open and close humidity thresholds.",
+      "input": [
+        {
+          "identifier": "openThreshold",
+          "name": "开启阈值",
+          "dataType": {
+            "type": "float",
+            "specs": {
+              "min": 0,
+              "max": 100,
+              "step": 0.1
+            }
+          },
+          "unit": "%"
+        },
+        {
+          "identifier": "closeThreshold",
+          "name": "关闭阈值",
+          "dataType": {
+            "type": "float",
+            "specs": {
+              "min": 0,
+              "max": 100,
+              "step": 0.1
+            }
+          },
+          "unit": "%"
+        }
+      ],
+      "output": [
+        {
+          "identifier": "result",
+          "name": "执行结果",
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "失败",
+              "true": "成功"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "identifier": "lightAlert",
+      "functionType": "u",
+      "name": "光照异常",
+      "eventType": "alert",
+      "description": "Reserved event for low or high light alert display.",
+      "outputData": [
+        {
+          "identifier": "lightValue",
+          "name": "光照原始值",
+          "dataType": {
+            "type": "int32",
+            "specs": {
+              "min": 0,
+              "max": 4095,
+              "step": 1
+            }
+          },
+          "unit": "ADC"
+        },
+        {
+          "identifier": "lightStatus",
+          "name": "光照状态",
+          "dataType": {
+            "type": "string",
+            "specs": {
+              "length": 16
+            }
+          }
+        }
+      ]
+    },
+    {
+      "identifier": "maintenanceAlert",
+      "functionType": "u",
+      "name": "维护振动事件",
+      "eventType": "info",
+      "description": "Reserved event for pruning, maintenance, or abnormal vibration.",
+      "outputData": [
+        {
+          "identifier": "vibrationDetected",
+          "name": "当前振动",
+          "dataType": {
+            "type": "bool",
+            "specs": {
+              "false": "无振动",
+              "true": "有振动"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

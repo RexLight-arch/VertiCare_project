@@ -1,0 +1,7 @@
+brokerUrl=pulsar+ssl://iot-north-mq.heclouds.com:6651/
+consumerGroupId=YOUR_CONSUMER_GROUP_ID
+consumerGroupKey=YOUR_NEW_CONSUMER_GROUP_KEY
+subscriptionName=YOUR_SUBSCRIPTION_NAME
+topic=YOUR_CONSUMER_GROUP_ID/iot/event
+productId=i9912Q27NU
+deviceName=verticare_01

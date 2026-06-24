@@ -1,0 +1,17 @@
+[onenet]
+productId=i9912Q27NU
+deviceName=verticare_01
+
+; Regenerate this key before use. Keep this file local.
+productAccessKey=YOUR_NEW_PRODUCT_ACCESS_KEY
+controlApiUrl=https://iot-api.heclouds.com/thingmodel/set-device-property
+tokenLifetimeSeconds=3600
+
+[bridge]
+javaPath=java
+jar=bridge/verticare-bridge.jar
+config=bridge/bridge.properties
+
+[ui]
+pollIntervalMs=3000
+mockMode=true

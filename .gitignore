@@ -1,1 +1,16 @@
 VertiCareDemo/config.h
+VertiCareWeb/.env
+VertiCareWeb/
+VertiCareQt/config.ini
+VertiCareQt/*.pro.user
+VertiCareBridge/bridge.properties
+VertiCareBridge/target/
+VertiCareQt/build*/
+build-VertiCareQt-*/
+QtMqtt-src/
+QtMqtt-build/
+QtMqtt-probe/
+01_数据手册/
+产品ID.docx
+项目笔记.md
+~$*.docx
