@@ -198,6 +198,48 @@
       "accessMode": "rw",
       "description": "Air humidity threshold for closing irrigation in auto mode.",
       "unit": "%"
+    },
+    {
+      "identifier": "dhtHealthy",
+      "functionType": "u",
+      "name": "温湿度传感器状态",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "异常",
+          "true": "正常"
+        }
+      },
+      "accessMode": "r",
+      "description": "DHT11 health status after consecutive read validation."
+    },
+    {
+      "identifier": "rainSensorHealthy",
+      "functionType": "u",
+      "name": "雨滴传感器状态",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "异常",
+          "true": "正常"
+        }
+      },
+      "accessMode": "r",
+      "description": "Rain sensor ADC and dry-baseline health status."
+    },
+    {
+      "identifier": "sensorHealthy",
+      "functionType": "u",
+      "name": "关键传感器状态",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "异常",
+          "true": "正常"
+        }
+      },
+      "accessMode": "r",
+      "description": "Combined health status of sensors used by automatic irrigation."
     }
   ],
   "services": [

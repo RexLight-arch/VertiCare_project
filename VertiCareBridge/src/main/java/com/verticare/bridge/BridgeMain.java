@@ -18,6 +18,7 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 public final class BridgeMain {
     private static final String DEFAULT_BROKER =
@@ -45,26 +46,8 @@ public final class BridgeMain {
         String broker = config.getProperty("brokerUrl", DEFAULT_BROKER).trim();
         String topic = config.getProperty("topic", accessId + "/iot/event").trim();
 
-        PulsarClient client = PulsarClient.builder()
-                .serviceUrl(broker)
-                .allowTlsInsecureConnection(true)
-                .authentication(new OneNetAuthentication(accessId, secretKey))
-                .build();
-
-        Consumer<String> consumer = client.newConsumer(Schema.STRING)
-                .topic(topic)
-                .subscriptionName(subscriptionName)
-                .subscriptionType(SubscriptionType.Failover)
-                .autoUpdatePartitions(false)
-                .subscribe();
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                consumer.close();
-                client.close();
-            } catch (Exception ignored) {
-            }
-        }));
+        long reconnectDelayMs = Long.parseLong(
+                config.getProperty("reconnectDelayMs", "5000").trim());
 
         Thread parentMonitor = new Thread(() -> {
             try {
@@ -78,47 +61,88 @@ public final class BridgeMain {
         parentMonitor.setDaemon(true);
         parentMonitor.start();
 
-        System.err.println("VertiCare bridge connected: " + topic);
         while (true) {
-            Message<String> message = consumer.receive();
             try {
-                JSONObject envelope = JSON.parseObject(message.getValue());
-                if (!verifySignature(envelope, secretKey)) {
-                    System.err.println("Dropped message with invalid signature.");
-                    consumer.negativeAcknowledge(message);
-                    continue;
-                }
-
-                String decrypted = decrypt(envelope.getString("data"),
-                        secretKey.substring(8, 24));
-                JSONObject event = JSON.parseObject(decrypted);
-                if (!"thingProperty".equals(event.getString("msgType"))) {
-                    consumer.acknowledge(message);
-                    continue;
-                }
-
-                JSONObject subData = event.getJSONObject("subData");
-                if (subData == null
-                        || (!productId.isEmpty()
-                        && !productId.equals(subData.getString("productId")))
-                        || (!deviceName.isEmpty()
-                        && !deviceName.equals(subData.getString("deviceName")))) {
-                    consumer.acknowledge(message);
-                    continue;
-                }
-
-                JSONObject output = new JSONObject();
-                output.put("type", "telemetry");
-                output.put("productId", subData.getString("productId"));
-                output.put("deviceName", subData.getString("deviceName"));
-                output.put("params", subData.getJSONObject("params"));
-                System.out.println(output.toJSONString());
-                System.out.flush();
-                consumer.acknowledge(message);
+                runConsumer(broker, accessId, secretKey, subscriptionName,
+                        topic, productId, deviceName);
             } catch (Exception exception) {
-                System.err.println("Message processing failed: " + exception.getMessage());
-                consumer.negativeAcknowledge(message);
+                System.err.println("Bridge connection failed: "
+                        + exception.getMessage() + "; retrying in "
+                        + reconnectDelayMs + " ms");
+                Thread.sleep(Math.max(1000, reconnectDelayMs));
             }
+        }
+    }
+
+    private static void runConsumer(String broker, String accessId,
+                                    String secretKey, String subscriptionName,
+                                    String topic, String productId,
+                                    String deviceName) throws Exception {
+        try (PulsarClient client = PulsarClient.builder()
+                .serviceUrl(broker)
+                .allowTlsInsecureConnection(true)
+                .authentication(new OneNetAuthentication(accessId, secretKey))
+                .build();
+             Consumer<String> consumer = client.newConsumer(Schema.STRING)
+                .topic(topic)
+                .subscriptionName(subscriptionName)
+                .subscriptionType(SubscriptionType.Failover)
+                .autoUpdatePartitions(false)
+                .subscribe()) {
+            System.err.println("VertiCare bridge connected: " + topic);
+            while (true) {
+                Message<String> message = consumer.receive(1, TimeUnit.SECONDS);
+                if (message == null)
+                    continue;
+                processMessage(consumer, message, secretKey,
+                        productId, deviceName);
+            }
+        }
+    }
+
+    private static void processMessage(Consumer<String> consumer,
+                                       Message<String> message,
+                                       String secretKey, String productId,
+                                       String deviceName) throws Exception {
+        try {
+            JSONObject envelope = JSON.parseObject(message.getValue());
+            if (!verifySignature(envelope, secretKey)) {
+                System.err.println("Dropped message with invalid signature.");
+                consumer.acknowledge(message);
+                return;
+            }
+
+            String decrypted = decrypt(envelope.getString("data"),
+                    secretKey.substring(8, 24));
+            JSONObject event = JSON.parseObject(decrypted);
+            if (!"thingProperty".equals(event.getString("msgType"))) {
+                consumer.acknowledge(message);
+                return;
+            }
+
+            JSONObject subData = event.getJSONObject("subData");
+            if (subData == null
+                    || (!productId.isEmpty()
+                    && !productId.equals(subData.getString("productId")))
+                    || (!deviceName.isEmpty()
+                    && !deviceName.equals(subData.getString("deviceName")))) {
+                consumer.acknowledge(message);
+                return;
+            }
+
+            JSONObject output = new JSONObject();
+            output.put("type", "telemetry");
+            output.put("productId", subData.getString("productId"));
+            output.put("deviceName", subData.getString("deviceName"));
+            output.put("receivedAt", System.currentTimeMillis());
+            output.put("params", subData.getJSONObject("params"));
+            System.out.println(output.toJSONString());
+            System.out.flush();
+            consumer.acknowledge(message);
+        } catch (Exception exception) {
+            System.err.println("Dropped malformed message: "
+                    + exception.getMessage());
+            consumer.acknowledge(message);
         }
     }
 

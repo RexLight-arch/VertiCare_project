@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QSettings>
+#include <QTimer>
 
 struct OneNetConfig
 {
@@ -19,6 +20,9 @@ struct OneNetConfig
     QString bridgeConfig = "bridge/bridge.properties";
     int tokenLifetimeSeconds = 3600;
     int pollIntervalMs = 3000;
+    int dataStaleTimeoutMs = 15000;
+    int bridgeRestartIntervalMs = 5000;
+    int controlTimeoutMs = 10000;
     bool mockMode = true;
 };
 
@@ -44,7 +48,8 @@ public slots:
 signals:
     void telemetryReceived(const QJsonObject &telemetry);
     void logMessage(const QString &message);
-    void requestFinished(bool ok, const QString &message);
+    void bridgeStateChanged(bool connected, const QString &message);
+    void controlFinished(bool ok, const QString &message);
 
 private:
     void readBridgeOutput();
@@ -61,8 +66,10 @@ private:
     OneNetConfig m_config;
     QNetworkAccessManager m_network;
     QProcess m_bridge;
+    QTimer m_bridgeRestartTimer;
     QByteArray m_stdoutBuffer;
     QJsonObject m_mockState;
+    bool m_stopping = false;
 };
 
 #endif

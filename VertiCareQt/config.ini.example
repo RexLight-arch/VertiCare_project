@@ -11,7 +11,10 @@ tokenLifetimeSeconds=3600
 javaPath=java
 jar=bridge/verticare-bridge.jar
 config=bridge/bridge.properties
+restartIntervalMs=5000
 
 [ui]
 pollIntervalMs=3000
+dataStaleTimeoutMs=15000
+controlTimeoutMs=10000
 mockMode=true

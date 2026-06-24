@@ -5,3 +5,4 @@ subscriptionName=YOUR_SUBSCRIPTION_NAME
 topic=YOUR_CONSUMER_GROUP_ID/iot/event
 productId=i9912Q27NU
 deviceName=verticare_01
+reconnectDelayMs=5000

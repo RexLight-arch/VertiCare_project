@@ -13,6 +13,7 @@
 - OneNet服务端订阅通过Pulsar向Java Bridge推送数据
 - Qt上位机显示实时状态，并通过OneNet HTTP API控制设备
 - 支持自动灌溉、手动灌溉和远程阈值设置
+- 支持关键传感器健康检测、断线自动恢复和Qt数据超时提示
 
 ## 项目结构
 
@@ -32,17 +33,18 @@ Qt -> OneNet HTTP API -> OneNet MQTT -> ESP32
 ## 快速开始
 
 1. 复制 `VertiCareDemo/config.h.example` 为 `config.h`，填写WiFi和设备Token。
-2. 使用Arduino IDE选择ESP32-C6开发板并烧录固件。
-3. 将 `VertiCareBridge/bridge.properties.example` 复制为
+2. 在OneNet导入 `VertiCareDemo/onenet/verticare_thing_model_control.json`。
+3. 使用Arduino IDE选择ESP32-C6开发板并烧录固件。
+4. 将 `VertiCareBridge/bridge.properties.example` 复制为
    `bridge.properties`，填写消费组信息。
-4. 构建Bridge：
+5. 构建Bridge：
 
 ```powershell
 mvn -f VertiCareBridge/pom.xml -DskipTests package
 ```
 
-5. 使用Qt Creator打开 `VertiCareQt/VertiCareQt.pro`。
-6. 将 `VertiCareQt/config.ini.example` 复制到程序运行目录并命名为
+6. 使用Qt Creator打开 `VertiCareQt/VertiCareQt.pro`。
+7. 将 `VertiCareQt/config.ini.example` 复制到程序运行目录并命名为
    `config.ini`，填写产品Access Key，将 `mockMode` 设置为 `false`。
 
 真实配置文件均已加入 `.gitignore`，不要将密钥提交到GitHub。

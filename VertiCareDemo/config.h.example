@@ -6,6 +6,7 @@
 static const char *WIFI_SSID = "YOUR_WIFI_SSID";
 static const char *WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
 static const unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+static const unsigned long WIFI_RECONNECT_INTERVAL_MS = 5000;
 
 // Device identity
 static const char *DEVICE_ID = "verticare_01";
@@ -23,6 +24,7 @@ static const char *MQTT_CLIENT_ID = "YOUR_DEVICE_NAME";
 static const char *MQTT_USERNAME = "YOUR_PRODUCT_ID";
 static const char *MQTT_PASSWORD = "YOUR_DEVICE_TOKEN";
 static const int MQTT_BUFFER_SIZE = 1024;
+static const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
 // Replace product id and device name after creating the OneNet device.
 static const char *ONENET_PROPERTY_POST_TOPIC =
@@ -49,6 +51,10 @@ static const bool VIBRATION_USE_PULLUP = true;
 // Sampling and upload intervals.
 static const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
 static const unsigned long MQTT_PUBLISH_INTERVAL_MS = 5000;
+static const uint8_t DHT_FAILURE_LIMIT = 3;
+static const uint8_t RAIN_ADC_FAILURE_LIMIT = 3;
+static const int ADC_HEALTH_MIN = 5;
+static const int ADC_HEALTH_MAX = 4090;
 // SW-420 pulse filtering. GPIO interrupt captures short LOW pulses.
 static const unsigned long VIBRATION_PULSE_DEBOUNCE_US = 30000;
 static const unsigned long VIBRATION_WINDOW_MS = 2000;

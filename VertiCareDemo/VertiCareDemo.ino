@@ -2,12 +2,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
+#include <Preferences.h>
 
 #include "config.h"
 
 DHT dht(DHT_PIN, DHT11);
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
+Preferences preferences;
 
 struct SensorData {
   float temperature;
@@ -18,6 +20,8 @@ struct SensorData {
   int vibrationDigitalValue;
   bool rainDetected;
   bool vibrationDetected;
+  bool dhtHealthy;
+  bool rainSensorHealthy;
 };
 
 struct ControlState {
@@ -34,6 +38,8 @@ unsigned long lastSensorReadMs = 0;
 unsigned long lastMqttPublishMs = 0;
 unsigned long maintenanceEventUntilMs = 0;
 unsigned long vibrationWindowStartedMs = 0;
+unsigned long lastWiFiAttemptMs = 0;
+unsigned long lastMqttAttemptMs = 0;
 
 volatile uint32_t vibrationPulseCount = 0;
 volatile uint32_t lastVibrationPulseUs = 0;
@@ -44,13 +50,17 @@ uint8_t rainDryCandidateCount = 0;
 uint8_t rainBaselineSampleCount = 0;
 uint32_t rainBaselineAccumulator = 0;
 int rainDryBaseline = -1;
+uint8_t dhtFailureCount = 0;
+uint8_t rainAdcFailureCount = 0;
+bool dhtEverValid = false;
 int controlMode = CONTROL_MODE_AUTO;
 bool manualIrrigation = false;
 float openHumidityThreshold = AIR_HUMIDITY_OPEN_THRESHOLD;
 float closeHumidityThreshold = AIR_HUMIDITY_CLOSE_THRESHOLD;
 
-void connectWiFi();
-void connectMqtt();
+void maintainConnections();
+void startWiFiConnection();
+void tryConnectMqtt();
 void ARDUINO_ISR_ATTR onVibrationPulse();
 void readSensors();
 void updateVibrationState();
@@ -93,6 +103,8 @@ void setup() {
   latestData.vibrationDigitalValue = HIGH;
   latestData.rainDetected = false;
   latestData.vibrationDetected = false;
+  latestData.dhtHealthy = false;
+  latestData.rainSensorHealthy = false;
   latestState.irrigationOn = false;
   latestState.servoAngle = SERVO_CLOSE_ANGLE;
   latestState.lightStatus = "unknown";
@@ -100,6 +112,15 @@ void setup() {
   vibrationWindowStartedMs = millis();
 
   applyServo(false);
+  preferences.begin("verticare", false);
+  int storedRainBaseline = preferences.getInt("rainBase", -1);
+  if (storedRainBaseline >= ADC_HEALTH_MIN &&
+      storedRainBaseline <= ADC_HEALTH_MAX) {
+    rainDryBaseline = storedRainBaseline;
+    rainBaselineSampleCount = RAIN_BASELINE_CALIBRATION_SAMPLES;
+    Serial.print(F("Loaded rain dry baseline: "));
+    Serial.println(rainDryBaseline);
+  }
 
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
@@ -110,20 +131,15 @@ void setup() {
   Serial.println(F("VertiCare demo starting..."));
   readSensors();
   updateControl();
-  connectWiFi();
+  startWiFiConnection();
 }
 
 void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
-    connectWiFi();
-  }
-
-  if (!mqttClient.connected()) {
-    connectMqtt();
-  }
-  mqttClient.loop();
-
   unsigned long now = millis();
+  maintainConnections();
+  if (mqttClient.connected()) {
+    mqttClient.loop();
+  }
 
   if (now - lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
     lastSensorReadMs = now;
@@ -137,51 +153,48 @@ void loop() {
   }
 }
 
-void connectWiFi() {
+void maintainConnections() {
+  unsigned long now = millis();
+  if (WiFi.status() != WL_CONNECTED) {
+    unsigned long retryInterval =
+        max(WIFI_CONNECT_TIMEOUT_MS, WIFI_RECONNECT_INTERVAL_MS);
+    if (now - lastWiFiAttemptMs >= retryInterval) {
+      startWiFiConnection();
+    }
+    return;
+  }
+
+  if (!mqttClient.connected() &&
+      now - lastMqttAttemptMs >= MQTT_RECONNECT_INTERVAL_MS) {
+    tryConnectMqtt();
+  }
+}
+
+void startWiFiConnection() {
+  lastWiFiAttemptMs = millis();
   Serial.print(F("Connecting WiFi: "));
   Serial.println(WIFI_SSID);
 
   WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  unsigned long startMs = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print('.');
-
-    if (millis() - startMs > WIFI_CONNECT_TIMEOUT_MS) {
-      Serial.println();
-      Serial.println(F("WiFi connect timeout, retrying..."));
-      WiFi.disconnect();
-      delay(800);
-      WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-      startMs = millis();
-    }
-  }
-
-  Serial.println();
-  Serial.print(F("WiFi connected, IP: "));
-  Serial.println(WiFi.localIP());
 }
 
-void connectMqtt() {
-  while (!mqttClient.connected()) {
-    Serial.print(F("Connecting OneNet MQTT... "));
+void tryConnectMqtt() {
+  lastMqttAttemptMs = millis();
+  Serial.print(F("Connecting OneNet MQTT... "));
 
-    bool ok = mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
-    if (ok) {
-      Serial.println(F("connected"));
-      bool subscribed = mqttClient.subscribe(ONENET_PROPERTY_SET_TOPIC);
-      Serial.print(F("Subscribed property set topic: "));
-      Serial.println(subscribed ? F("ok") : F("failed"));
-      return;
-    }
-
-    Serial.print(F("failed, state="));
-    Serial.print(mqttClient.state());
-    Serial.println(F(", retry in 3 seconds"));
-    delay(3000);
+  bool ok = mqttClient.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
+  if (ok) {
+    Serial.println(F("connected"));
+    bool subscribed = mqttClient.subscribe(ONENET_PROPERTY_SET_TOPIC);
+    Serial.print(F("Subscribed property set topic: "));
+    Serial.println(subscribed ? F("ok") : F("failed"));
+    return;
   }
+
+  Serial.print(F("failed, state="));
+  Serial.println(mqttClient.state());
 }
 
 void ARDUINO_ISR_ATTR onVibrationPulse() {
@@ -195,6 +208,7 @@ void ARDUINO_ISR_ATTR onVibrationPulse() {
 void readSensors() {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
+  bool dhtReadOk = !isnan(humidity) && !isnan(temperature);
 
   if (!isnan(humidity)) {
     latestData.airHumidity = humidity;
@@ -207,9 +221,32 @@ void readSensors() {
   } else {
     Serial.println(F("DHT temperature read failed, keeping last value"));
   }
+  if (dhtReadOk) {
+    dhtFailureCount = 0;
+    dhtEverValid = true;
+    latestData.dhtHealthy = true;
+  } else {
+    if (dhtFailureCount < DHT_FAILURE_LIMIT) {
+      ++dhtFailureCount;
+    }
+    latestData.dhtHealthy =
+        dhtEverValid && dhtFailureCount < DHT_FAILURE_LIMIT;
+  }
 
   latestData.lightValue = analogRead(LIGHT_ADC_PIN);
   latestData.rainValue = readMedianAdc(RAIN_ADC_PIN, RAIN_ADC_SAMPLE_COUNT);
+  bool rainAdcValid = latestData.rainValue >= ADC_HEALTH_MIN &&
+                      latestData.rainValue <= ADC_HEALTH_MAX;
+  if (rainAdcValid) {
+    rainAdcFailureCount = 0;
+  } else if (rainAdcFailureCount < RAIN_ADC_FAILURE_LIMIT) {
+    ++rainAdcFailureCount;
+  }
+  latestData.rainSensorHealthy =
+      (!RAIN_USE_ANALOG ||
+       rainAdcFailureCount < RAIN_ADC_FAILURE_LIMIT) &&
+      (!RAIN_USE_ANALOG ||
+       rainBaselineSampleCount >= RAIN_BASELINE_CALIBRATION_SAMPLES);
 
   latestData.rainDigitalValue = digitalRead(RAIN_DIGITAL_PIN);
   latestData.vibrationDigitalValue = digitalRead(VIBRATION_PIN);
@@ -223,6 +260,8 @@ void readSensors() {
     if (rainBaselineSampleCount == RAIN_BASELINE_CALIBRATION_SAMPLES) {
       rainDryBaseline =
           rainBaselineAccumulator / RAIN_BASELINE_CALIBRATION_SAMPLES;
+      preferences.putInt("rainBase", rainDryBaseline);
+      latestData.rainSensorHealthy = true;
       Serial.print(F("Rain dry baseline calibrated: "));
       Serial.println(rainDryBaseline);
     }
@@ -330,12 +369,16 @@ void updateRainState(bool rainCandidate, bool dryCandidate) {
 void updateControl() {
   latestState.lightStatus = classifyLight(latestData.lightValue);
   latestState.maintenanceEvent = millis() < maintenanceEventUntilMs;
+  bool sensorHealthy =
+      latestData.dhtHealthy && latestData.rainSensorHealthy;
 
   bool humidityLow = latestData.airHumidity > 0 && latestData.airHumidity < openHumidityThreshold;
   bool humidityRecovered = latestData.airHumidity >= closeHumidityThreshold;
 
   if (controlMode == CONTROL_MODE_MANUAL) {
     latestState.irrigationOn = manualIrrigation;
+  } else if (!sensorHealthy) {
+    latestState.irrigationOn = false;
   } else {
     if (latestData.rainDetected || humidityRecovered) {
       latestState.irrigationOn = false;
@@ -372,10 +415,17 @@ void updateControl() {
   Serial.print(F(" Irrigation="));
   Serial.print(latestState.irrigationOn ? F("on") : F("off"));
   Serial.print(F(" Mode="));
-  Serial.println(controlMode == CONTROL_MODE_MANUAL ? F("manual") : F("auto"));
+  Serial.print(controlMode == CONTROL_MODE_MANUAL ? F("manual") : F("auto"));
+  Serial.print(F(" Sensors="));
+  Serial.println(sensorHealthy ? F("ok") : F("fault"));
 }
 
 void publishTelemetry() {
+  if (!mqttClient.connected()) {
+    Serial.println(F("MQTT offline, telemetry skipped"));
+    return;
+  }
+
   String payload = buildOneNetPropertyPayload();
 
   Serial.print(F("Publishing to "));
@@ -626,7 +676,13 @@ String buildTelemetryJson() {
   json += "\"controlMode\":" + String(controlMode) + ",";
   json += "\"manualIrrigation\":" + String(manualIrrigation ? "true" : "false") + ",";
   json += "\"openThreshold\":" + String(openHumidityThreshold, 1) + ",";
-  json += "\"closeThreshold\":" + String(closeHumidityThreshold, 1);
+  json += "\"closeThreshold\":" + String(closeHumidityThreshold, 1) + ",";
+  json += "\"dhtHealthy\":" + String(latestData.dhtHealthy ? "true" : "false") + ",";
+  json += "\"rainSensorHealthy\":" + String(latestData.rainSensorHealthy ? "true" : "false") + ",";
+  json += "\"sensorHealthy\":" +
+          String((latestData.dhtHealthy && latestData.rainSensorHealthy)
+                     ? "true"
+                     : "false");
   json += "}";
   return json;
 }
@@ -649,7 +705,14 @@ String buildOneNetPropertyPayload() {
   json += "\"controlMode\":{\"value\":" + String(controlMode) + "},";
   json += "\"manualIrrigation\":{\"value\":" + String(manualIrrigation ? "true" : "false") + "},";
   json += "\"openThreshold\":{\"value\":" + String(openHumidityThreshold, 1) + "},";
-  json += "\"closeThreshold\":{\"value\":" + String(closeHumidityThreshold, 1) + "}";
+  json += "\"closeThreshold\":{\"value\":" + String(closeHumidityThreshold, 1) + "},";
+  json += "\"dhtHealthy\":{\"value\":" + String(latestData.dhtHealthy ? "true" : "false") + "},";
+  json += "\"rainSensorHealthy\":{\"value\":" + String(latestData.rainSensorHealthy ? "true" : "false") + "},";
+  json += "\"sensorHealthy\":{\"value\":" +
+          String((latestData.dhtHealthy && latestData.rainSensorHealthy)
+                     ? "true"
+                     : "false") +
+          "}";
   json += "}}";
   return json;
 }

@@ -181,12 +181,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(&m_client, &OneNetClient::telemetryReceived,
             this, &MainWindow::applyTelemetry);
-    connect(&m_client, &OneNetClient::requestFinished, this,
-            [this](bool ok, const QString &message) {
-        setConnectionState(ok, ok ? QStringLiteral("OneNet 已连接")
-                                  : QStringLiteral("连接异常: ") + message);
+    connect(&m_client, &OneNetClient::bridgeStateChanged, this,
+            [this](bool connected, const QString &message) {
+        if (!m_lastTelemetryAt.isValid() || !connected)
+            setConnectionState(connected, message);
     });
+    connect(&m_client, &OneNetClient::controlFinished,
+            this, &MainWindow::handleControlFinished);
     connect(&m_pollTimer, &QTimer::timeout, this, &MainWindow::refreshTelemetry);
+    connect(&m_healthTimer, &QTimer::timeout,
+            this, &MainWindow::updateFreshness);
 
     if (!m_client.loadConfig(configPath())) {
         OneNetConfig defaults;
@@ -199,6 +203,7 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowTitle(QStringLiteral("VertiCare 垂直绿化管家"));
     setMinimumSize(1080, 700);
     m_pollTimer.start(m_client.config().pollIntervalMs);
+    m_healthTimer.start(1000);
     refreshTelemetry();
 }
 
@@ -270,7 +275,7 @@ void MainWindow::buildUi()
         "QFrame#metricCard, QFrame#controlPanel {"
         " background: #10221b; border: 1px solid #234435; border-radius: 8px; }"
         "QFrame#metricCard:hover { background: #132920; border-color: #376b52; }"
-        "QLabel[metricName='true'] { color: #9bb2a7; font-size: 15px; font-weight: 600; }"
+        "QLabel[metricName='true'] { color: #afc5ba; font-size: 17px; font-weight: 600; }"
         "QLabel[metricValue='true'] { color: #f5fff9; font-size: 31px; font-weight: 700; }"
         "QLabel[metricUnit='true'] { color: #779084; font-size: 13px; font-weight: 600; }"
         "QLabel#panelTitle { color: #effaf4; font-size: 18px; font-weight: 600; }"
@@ -286,6 +291,8 @@ void MainWindow::buildUi()
         "QPushButton#primaryButton { background: #38c979; color: #062015; border: none; }"
         "QPushButton#primaryButton:hover { background: #51df91; }"
         "QPushButton#stopButton { background: #2b2119; color: #ffc58e; border-color: #61452e; }"
+        "QPushButton:disabled { background: #14231d; color: #60746a; border-color: #25372f; }"
+        "QLabel#commandStatus { color: #7f998d; font-size: 12px; }"
     );
 }
 
@@ -376,23 +383,27 @@ QWidget *MainWindow::buildControlPanel()
     layout->addWidget(m_manualIrrigation);
 
     QHBoxLayout *actions = new QHBoxLayout;
-    QPushButton *applyButton = new QPushButton(QStringLiteral("应用设置"), panel);
-    QPushButton *openButton = new QPushButton(QStringLiteral("立即灌溉"), panel);
-    QPushButton *closeButton = new QPushButton(QStringLiteral("停止灌溉"), panel);
-    applyButton->setObjectName("primaryButton");
-    closeButton->setObjectName("stopButton");
-    actions->addWidget(applyButton, 2);
-    actions->addWidget(openButton);
-    actions->addWidget(closeButton);
+    m_applyButton = new QPushButton(QStringLiteral("应用设置"), panel);
+    m_openButton = new QPushButton(QStringLiteral("立即灌溉"), panel);
+    m_closeButton = new QPushButton(QStringLiteral("停止灌溉"), panel);
+    m_applyButton->setObjectName("primaryButton");
+    m_closeButton->setObjectName("stopButton");
+    actions->addWidget(m_applyButton, 2);
+    actions->addWidget(m_openButton);
+    actions->addWidget(m_closeButton);
     layout->addLayout(actions);
 
-    connect(applyButton, &QPushButton::clicked, this, &MainWindow::sendControl);
-    connect(openButton, &QPushButton::clicked, this, [this]() {
+    m_commandStatus = new QLabel(QStringLiteral("控制通道就绪"), panel);
+    m_commandStatus->setObjectName("commandStatus");
+    layout->addWidget(m_commandStatus);
+
+    connect(m_applyButton, &QPushButton::clicked, this, &MainWindow::sendControl);
+    connect(m_openButton, &QPushButton::clicked, this, [this]() {
         m_manualMode->setChecked(true);
         m_manualIrrigation->setChecked(true);
         sendControl();
     });
-    connect(closeButton, &QPushButton::clicked, this, [this]() {
+    connect(m_closeButton, &QPushButton::clicked, this, [this]() {
         m_manualMode->setChecked(true);
         m_manualIrrigation->setChecked(false);
         sendControl();
@@ -415,7 +426,9 @@ void MainWindow::refreshTelemetry()
 
 void MainWindow::sendControl()
 {
-    setConnectionState(true, QStringLiteral("正在发送控制指令"));
+    setControlBusy(true);
+    m_commandStatus->setText(QStringLiteral("正在发送控制指令..."));
+    m_commandStatus->setStyleSheet("color: #ffd991;");
     m_client.setProperties(controlParamsFromUi());
 }
 
@@ -461,11 +474,18 @@ void MainWindow::applyTelemetry(const QJsonObject &telemetry)
     const int angle = telemetry.value("servoAngle").toInt();
     m_plantScene->setState(irrigating, raining, vibrating, angle);
 
+    m_lastTelemetryAt = QDateTime::currentDateTime();
+    m_sensorHealthy = telemetry.value("sensorHealthy").toBool(true);
     m_updatedAt->setText(QStringLiteral("更新于 ") +
-                         QDateTime::currentDateTime().toString("HH:mm:ss"));
-    setConnectionState(true, m_client.config().mockMode
-                       ? QStringLiteral("演示数据")
-                       : QStringLiteral("OneNet 已连接"));
+                         m_lastTelemetryAt.toString("HH:mm:ss"));
+    if (!m_sensorHealthy) {
+        setConnectionState(false, QStringLiteral("设备在线 · 关键传感器异常"),
+                           "#ffb85c");
+    } else {
+        setConnectionState(true, m_client.config().mockMode
+                           ? QStringLiteral("演示数据")
+                           : QStringLiteral("设备在线 · 数据实时"));
+    }
 }
 
 void MainWindow::setMetric(const QString &key, const QString &value)
@@ -474,10 +494,45 @@ void MainWindow::setMetric(const QString &key, const QString &value)
         m_metrics.value(key)->setText(value);
 }
 
-void MainWindow::setConnectionState(bool online, const QString &message)
+void MainWindow::updateFreshness()
 {
+    if (!m_lastTelemetryAt.isValid())
+        return;
+
+    const qint64 ageMs = m_lastTelemetryAt.msecsTo(QDateTime::currentDateTime());
+    if (ageMs > m_client.config().dataStaleTimeoutMs) {
+        setConnectionState(false,
+                QStringLiteral("数据已 %1 秒未更新")
+                .arg(qMax<qint64>(1, ageMs / 1000)), "#ffb85c");
+    } else if (!m_sensorHealthy) {
+        setConnectionState(false, QStringLiteral("设备在线 · 关键传感器异常"),
+                           "#ffb85c");
+    }
+}
+
+void MainWindow::handleControlFinished(bool ok, const QString &message)
+{
+    setControlBusy(false);
+    m_commandStatus->setText(message);
+    m_commandStatus->setStyleSheet(ok ? "color: #70e5a5;"
+                                      : "color: #ff806f;");
+}
+
+void MainWindow::setControlBusy(bool busy)
+{
+    for (QPushButton *button : {m_applyButton, m_openButton, m_closeButton}) {
+        if (button)
+            button->setEnabled(!busy);
+    }
+}
+
+void MainWindow::setConnectionState(bool online, const QString &message,
+                                    const QString &color)
+{
+    const QString stateColor = color.isEmpty()
+            ? (online ? "#45dc8b" : "#ff806f") : color;
     m_connectionDot->setStyleSheet(QString("background: %1; border-radius: 5px;")
-                                   .arg(online ? "#45dc8b" : "#ff806f"));
+                                   .arg(stateColor));
     m_connectionText->setText(message);
 }
 

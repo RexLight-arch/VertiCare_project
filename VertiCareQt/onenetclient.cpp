@@ -15,6 +15,7 @@ OneNetClient::OneNetClient(QObject *parent)
     : QObject(parent)
 {
     m_mockState = mockTelemetry();
+    m_bridgeRestartTimer.setSingleShot(true);
 
     connect(&m_bridge, &QProcess::readyReadStandardOutput,
             this, &OneNetClient::readBridgeOutput);
@@ -23,18 +24,28 @@ OneNetClient::OneNetClient(QObject *parent)
     connect(&m_bridge,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
             this, [this](int exitCode, QProcess::ExitStatus status) {
-        if (!m_config.mockMode) {
-            emit requestFinished(false,
-                    QStringLiteral("数据接收服务已停止，退出码 %1，状态 %2")
-                    .arg(exitCode).arg(int(status)));
+        if (!m_config.mockMode && !m_stopping) {
+            emit bridgeStateChanged(false,
+                    QStringLiteral("数据接收服务已停止，%1 秒后重试")
+                    .arg(qMax(1, m_config.bridgeRestartIntervalMs / 1000)));
+            emit logMessage(QStringLiteral("Bridge 退出码 %1，状态 %2")
+                            .arg(exitCode).arg(int(status)));
+            m_bridgeRestartTimer.start(
+                        qMax(1000, m_config.bridgeRestartIntervalMs));
         }
     });
     connect(&m_bridge, &QProcess::errorOccurred, this,
             [this](QProcess::ProcessError) {
-        if (!m_config.mockMode)
-            emit requestFinished(false,
-                    QStringLiteral("无法启动数据接收服务: ") + m_bridge.errorString());
+        if (!m_config.mockMode && !m_stopping) {
+            emit bridgeStateChanged(false,
+                    QStringLiteral("无法启动数据接收服务: ")
+                    + m_bridge.errorString());
+            m_bridgeRestartTimer.start(
+                        qMax(1000, m_config.bridgeRestartIntervalMs));
+        }
     });
+    connect(&m_bridgeRestartTimer, &QTimer::timeout,
+            this, &OneNetClient::startBridge);
 }
 
 OneNetClient::~OneNetClient()
@@ -71,7 +82,13 @@ bool OneNetClient::loadConfig(const QString &path)
                 "bridge/jar", "bridge/verticare-bridge.jar").toString();
     next.bridgeConfig = settings.value(
                 "bridge/config", "bridge/bridge.properties").toString();
+    next.bridgeRestartIntervalMs = settings.value(
+                "bridge/restartIntervalMs", 5000).toInt();
     next.pollIntervalMs = settings.value("ui/pollIntervalMs", 3000).toInt();
+    next.dataStaleTimeoutMs = settings.value(
+                "ui/dataStaleTimeoutMs", 15000).toInt();
+    next.controlTimeoutMs = settings.value(
+                "ui/controlTimeoutMs", 10000).toInt();
     next.mockMode = settings.value("ui/mockMode", true).toBool();
     setConfig(next);
     return true;
@@ -88,7 +105,11 @@ bool OneNetClient::saveConfig(const QString &path) const
     settings.setValue("bridge/javaPath", m_config.javaPath);
     settings.setValue("bridge/jar", m_config.bridgeJar);
     settings.setValue("bridge/config", m_config.bridgeConfig);
+    settings.setValue("bridge/restartIntervalMs",
+                      m_config.bridgeRestartIntervalMs);
     settings.setValue("ui/pollIntervalMs", m_config.pollIntervalMs);
+    settings.setValue("ui/dataStaleTimeoutMs", m_config.dataStaleTimeoutMs);
+    settings.setValue("ui/controlTimeoutMs", m_config.controlTimeoutMs);
     settings.setValue("ui/mockMode", m_config.mockMode);
     settings.sync();
     return settings.status() == QSettings::NoError;
@@ -96,9 +117,10 @@ bool OneNetClient::saveConfig(const QString &path) const
 
 void OneNetClient::startBridge()
 {
+    m_stopping = false;
     if (m_config.mockMode) {
         emit telemetryReceived(m_mockState);
-        emit requestFinished(true, QStringLiteral("演示数据"));
+        emit bridgeStateChanged(true, QStringLiteral("演示数据"));
         return;
     }
 
@@ -108,11 +130,11 @@ void OneNetClient::startBridge()
     const QString jar = resolvePath(m_config.bridgeJar);
     const QString bridgeConfig = resolvePath(m_config.bridgeConfig);
     if (!QFileInfo::exists(jar)) {
-        emit requestFinished(false, QStringLiteral("找不到接收服务: ") + jar);
+        emit bridgeStateChanged(false, QStringLiteral("找不到接收服务: ") + jar);
         return;
     }
     if (!QFileInfo::exists(bridgeConfig)) {
-        emit requestFinished(false, QStringLiteral("找不到接收配置: ") + bridgeConfig);
+        emit bridgeStateChanged(false, QStringLiteral("找不到接收配置: ") + bridgeConfig);
         return;
     }
 
@@ -121,11 +143,13 @@ void OneNetClient::startBridge()
     m_bridge.setArguments(QStringList() << "-jar" << jar << bridgeConfig);
     m_bridge.setWorkingDirectory(QFileInfo(jar).absolutePath());
     m_bridge.start();
-    emit requestFinished(true, QStringLiteral("正在启动 OneNet 数据接收服务"));
+    emit bridgeStateChanged(false, QStringLiteral("正在连接 OneNet 数据服务"));
 }
 
 void OneNetClient::stopBridge()
 {
+    m_stopping = true;
+    m_bridgeRestartTimer.stop();
     if (m_bridge.state() == QProcess::NotRunning)
         return;
     m_bridge.terminate();
@@ -149,12 +173,12 @@ void OneNetClient::setProperties(const QJsonObject &params)
     if (m_config.mockMode) {
         applyMockCommand(params);
         emit telemetryReceived(m_mockState);
-        emit requestFinished(true, QStringLiteral("演示指令已执行"));
+        emit controlFinished(true, QStringLiteral("演示指令已执行"));
         return;
     }
 
     if (m_config.productAccessKey.trimmed().isEmpty()) {
-        emit requestFinished(false, QStringLiteral("未配置产品 Access Key"));
+        emit controlFinished(false, QStringLiteral("未配置产品 Access Key"));
         return;
     }
 
@@ -169,28 +193,35 @@ void OneNetClient::setProperties(const QJsonObject &params)
 
     QNetworkReply *reply = m_network.post(
                 request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    QTimer::singleShot(qMax(1000, m_config.controlTimeoutMs), reply, [reply]() {
+        if (reply->isRunning())
+            reply->abort();
+    });
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         const QByteArray bytes = reply->readAll();
         const QJsonDocument document = QJsonDocument::fromJson(bytes);
         const QJsonObject root = document.object();
         const bool networkOk = reply->error() == QNetworkReply::NoError;
         const bool apiOk = networkOk && root.value("code").toInt(-1) == 0;
+        const QJsonObject data = root.value("data").toObject();
+        const bool deviceOk = apiOk && data.value("code").toInt(-1) == 200;
 
         QString message;
-        if (apiOk) {
-            const QJsonObject data = root.value("data").toObject();
-            message = data.value("code").toInt() == 200
-                    ? QStringLiteral("设备已执行控制指令")
-                    : QStringLiteral("OneNet 已接收，设备返回: ")
-                      + data.value("msg").toString();
+        if (deviceOk) {
+            message = QStringLiteral("设备已执行控制指令");
+        } else if (apiOk) {
+            message = QStringLiteral("设备执行失败: ")
+                    + data.value("msg").toString(QStringLiteral("无响应"));
         } else if (!networkOk) {
-            message = reply->errorString();
+            message = reply->error() == QNetworkReply::OperationCanceledError
+                    ? QStringLiteral("控制请求超时")
+                    : reply->errorString();
         } else {
             message = root.value("msg").toString(QStringLiteral("控制请求失败"));
         }
 
         emit logMessage(QString::fromUtf8(bytes));
-        emit requestFinished(apiOk, message);
+        emit controlFinished(deviceOk, message);
         reply->deleteLater();
     });
 }
@@ -220,7 +251,7 @@ void OneNetClient::readBridgeOutput()
         const QJsonObject telemetry = normalizeTelemetry(params);
         if (!telemetry.isEmpty()) {
             emit telemetryReceived(telemetry);
-            emit requestFinished(true, QStringLiteral("OneNet 实时数据"));
+            emit bridgeStateChanged(true, QStringLiteral("OneNet 实时数据"));
         }
     }
 }
@@ -229,8 +260,13 @@ void OneNetClient::readBridgeErrors()
 {
     const QString text = QString::fromLocal8Bit(
                 m_bridge.readAllStandardError()).trimmed();
-    if (!text.isEmpty())
+    if (!text.isEmpty()) {
         emit logMessage(text);
+        if (text.contains("VertiCare bridge connected:"))
+            emit bridgeStateChanged(true, QStringLiteral("OneNet 数据服务已连接"));
+        else if (text.contains("Bridge connection failed:"))
+            emit bridgeStateChanged(false, QStringLiteral("OneNet 数据服务重连中"));
+    }
 }
 
 QString OneNetClient::resolvePath(const QString &path) const
@@ -290,7 +326,8 @@ QJsonObject OneNetClient::normalizeTelemetry(const QJsonObject &source) const
         "temperature", "airHumidity", "lightValue", "lightStatus",
         "rainDetected", "vibrationDetected", "maintenanceEvent",
         "irrigationState", "servoAngle", "controlMode",
-        "manualIrrigation", "openThreshold", "closeThreshold"
+        "manualIrrigation", "openThreshold", "closeThreshold",
+        "dhtHealthy", "rainSensorHealthy", "sensorHealthy"
     };
     for (const QString &key : keys) {
         if (source.contains(key))
@@ -325,6 +362,9 @@ QJsonObject OneNetClient::mockTelemetry() const
     object.insert("manualIrrigation", false);
     object.insert("openThreshold", 45.0);
     object.insert("closeThreshold", 60.0);
+    object.insert("dhtHealthy", true);
+    object.insert("rainSensorHealthy", true);
+    object.insert("sensorHealthy", true);
     return object;
 }
 

@@ -36,9 +36,12 @@ tokenLifetimeSeconds=3600
 javaPath=java
 jar=bridge/verticare-bridge.jar
 config=bridge/bridge.properties
+restartIntervalMs=5000
 
 [ui]
 pollIntervalMs=3000
+dataStaleTimeoutMs=15000
+controlTimeoutMs=10000
 mockMode=false
 ```
 
@@ -46,3 +49,6 @@ Bridge配置参照 `VertiCareBridge/bridge.properties.example`。
 
 上位机关闭时，Bridge会自动退出，避免残留进程继续占用Failover订阅。
 同一订阅不要同时启动多个上位机实例。
+
+上位机会显示实时数据、数据超时和关键传感器异常状态；控制请求期间
+按钮会暂时锁定，并显示设备执行成功、失败或超时结果。
