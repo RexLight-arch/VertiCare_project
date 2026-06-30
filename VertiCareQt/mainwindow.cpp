@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
@@ -288,17 +289,32 @@ public:
     explicit TrendChartWidget(QWidget *parent = nullptr)
         : QWidget(parent)
     {
-        setMinimumHeight(360);
+        setMinimumHeight(430);
+        setMouseTracking(true);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     }
 
     void setSamples(const QVector<TrendSample> &samples)
     {
         m_samples = samples;
+        m_hoverIndex = -1;
         update();
     }
 
 protected:
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        m_mousePos = event->pos();
+        m_hoverIndex = nearestSampleIndex(event->pos());
+        update();
+    }
+
+    void leaveEvent(QEvent *) override
+    {
+        m_hoverIndex = -1;
+        update();
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
@@ -312,11 +328,18 @@ protected:
         p.setBrush(background);
         p.drawRoundedRect(canvas, 8, 8);
 
-        const QRectF plot = canvas.adjusted(54, 72, -28, -44);
+        m_plotRect = canvas.adjusted(64, 132, -34, -82);
+        const QRectF plot = m_plotRect;
         p.setPen(QPen(QColor(93, 255, 202, 45), 1));
         for (int i = 0; i <= 4; ++i) {
             const qreal y = plot.top() + plot.height() * i / 4.0;
             p.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
+            p.setPen(QColor("#79cbd2"));
+            p.setFont(QFont("Microsoft YaHei UI", 8));
+            p.drawText(QRectF(canvas.left() + 18, y - 9, 36, 18),
+                       Qt::AlignRight | Qt::AlignVCenter,
+                       QString::number(100 - i * 25));
+            p.setPen(QPen(QColor(93, 255, 202, 45), 1));
         }
         for (int i = 0; i <= 6; ++i) {
             const qreal x = plot.left() + plot.width() * i / 6.0;
@@ -325,8 +348,8 @@ protected:
 
         p.setPen(QColor("#d9fff1"));
         p.setFont(QFont("Microsoft YaHei UI", 13, QFont::Bold));
-        p.drawText(QRectF(canvas.left() + 18, canvas.top() + 12,
-                          qMin<qreal>(canvas.width() * 0.55, 360), 24),
+        p.drawText(QRectF(canvas.left() + 18, canvas.top() + 14,
+                          qMin<qreal>(canvas.width() * 0.55, 390), 26),
                    Qt::AlignLeft | Qt::AlignVCenter,
                    QStringLiteral("实时趋势 · 最近30分钟窗口"));
 
@@ -335,7 +358,7 @@ protected:
             p.setFont(QFont("Microsoft YaHei UI", 12));
             p.drawText(plot, Qt::AlignCenter,
                        QStringLiteral("收到第一条数据后开始绘制"));
-            drawLegend(p, canvas);
+            drawLegend(p, canvas, nullptr);
             return;
         }
 
@@ -347,6 +370,9 @@ protected:
             const qreal y = plot.bottom() - plot.height() * qBound(0.0, value, 100.0) / 100.0;
             return QPointF(x, y);
         };
+
+        drawCurrentCards(p, canvas, m_samples.last());
+        drawStats(p, canvas);
 
         if (m_samples.size() == 1) {
             drawPoint(p, plot, QColor("#ffb86b"), m_samples.first().temperature);
@@ -366,10 +392,62 @@ protected:
                    Qt::AlignLeft, m_samples.first().timestamp.toString("HH:mm"));
         p.drawText(QRectF(plot.right() - 120, plot.bottom() + 12, 120, 20),
                    Qt::AlignRight, m_samples.last().timestamp.toString("HH:mm"));
-        drawLegend(p, canvas);
+        p.drawText(QRectF(plot.left() - 8, plot.top() - 22, 200, 18),
+                   Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("归一化指数 / %"));
+        drawLegend(p, canvas, &m_samples.last());
+        drawHover(p, plot, pointFor);
     }
 
 private:
+    QString formatValue(int series, double value) const
+    {
+        switch (series) {
+        case 0:
+            return QStringLiteral("%1°C").arg(value, 0, 'f', 1);
+        case 1:
+            return QStringLiteral("%1%").arg(qRound(value));
+        case 2:
+            return QStringLiteral("%1%").arg(qRound(value));
+        default:
+            return QStringLiteral("%1%").arg(qRound(value));
+        }
+    }
+
+    double sampleValue(const TrendSample &sample, int series) const
+    {
+        switch (series) {
+        case 0:
+            return sample.temperature;
+        case 1:
+            return sample.humidity;
+        case 2:
+            return sample.brightness;
+        default:
+            return sample.airQuality;
+        }
+    }
+
+    int nearestSampleIndex(const QPoint &pos) const
+    {
+        if (m_samples.isEmpty() || !m_plotRect.adjusted(-10, -14, 10, 14).contains(pos))
+            return -1;
+
+        const QDateTime start = m_samples.first().timestamp;
+        const qint64 span = qMax<qint64>(1, start.secsTo(m_samples.last().timestamp));
+        int bestIndex = -1;
+        qreal bestDistance = 999999.0;
+        for (int i = 0; i < m_samples.size(); ++i) {
+            const qreal x = m_plotRect.left() + m_plotRect.width() *
+                    start.secsTo(m_samples.at(i).timestamp) / span;
+            const qreal distance = qAbs(pos.x() - x);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+        return bestDistance <= 22.0 ? bestIndex : -1;
+    }
+
     template <typename ValueGetter, typename PointGetter>
     void drawSeries(QPainter &p, const QRectF &, const QColor &color,
                     ValueGetter value, PointGetter pointFor)
@@ -386,6 +464,40 @@ private:
         p.drawPath(path);
     }
 
+    void drawCurrentCards(QPainter &p, const QRectF &canvas, const TrendSample &latest)
+    {
+        const QStringList names = {
+            QStringLiteral("温度"), QStringLiteral("湿度"),
+            QStringLiteral("亮度"), QStringLiteral("空气")
+        };
+        const QList<QColor> colors = seriesColors();
+        const qreal gap = 10;
+        const qreal left = canvas.left() + 18;
+        const qreal top = canvas.top() + 52;
+        const qreal cardWidth = qMin<qreal>(132, (canvas.width() - 36 - gap * 3) / 4.0);
+        const qreal cardHeight = 52;
+
+        for (int i = 0; i < names.size(); ++i) {
+            const QRectF card(left + i * (cardWidth + gap), top, cardWidth, cardHeight);
+            QLinearGradient gradient(card.topLeft(), card.bottomRight());
+            gradient.setColorAt(0.0, QColor(255, 255, 255, 28));
+            gradient.setColorAt(1.0, QColor(255, 255, 255, 10));
+            p.setPen(QPen(colors.at(i), 1));
+            p.setBrush(gradient);
+            p.drawRoundedRect(card, 8, 8);
+
+            p.setPen(QColor("#9bdce2"));
+            p.setFont(QFont("Microsoft YaHei UI", 8));
+            p.drawText(card.adjusted(12, 7, -8, -28),
+                       Qt::AlignLeft | Qt::AlignVCenter, names.at(i));
+            p.setPen(QColor("#f0fff9"));
+            p.setFont(QFont("Microsoft YaHei UI", 15, QFont::Bold));
+            p.drawText(card.adjusted(12, 24, -8, -4),
+                       Qt::AlignLeft | Qt::AlignVCenter,
+                       formatValue(i, sampleValue(latest, i)));
+        }
+    }
+
     void drawPoint(QPainter &p, const QRectF &plot, const QColor &color, double value)
     {
         const QPointF point(plot.center().x(),
@@ -395,31 +507,131 @@ private:
         p.drawEllipse(point, 5.5, 5.5);
     }
 
-    void drawLegend(QPainter &p, const QRectF &canvas)
+    void drawLegend(QPainter &p, const QRectF &canvas, const TrendSample *latest)
     {
         const QStringList labels = {
             QStringLiteral("温度"), QStringLiteral("湿度"),
             QStringLiteral("亮度"), QStringLiteral("通风")
         };
-        const QList<QColor> colors = {
-            QColor("#ffb86b"), QColor("#66d7f2"),
-            QColor("#ffe178"), QColor("#a978f0")
-        };
+        const QList<QColor> colors = seriesColors();
         qreal x = canvas.left() + 22;
-        const qreal y = canvas.top() + 54;
+        const qreal y = canvas.bottom() - 36;
         p.setFont(QFont("Microsoft YaHei UI", 10, QFont::Bold));
         for (int i = 0; i < labels.size(); ++i) {
             p.setPen(Qt::NoPen);
             p.setBrush(colors.at(i));
             p.drawEllipse(QPointF(x, y), 4, 4);
             p.setPen(QColor("#d9fff1"));
-            p.drawText(QRectF(x + 10, y - 9, 48, 18), Qt::AlignVCenter, labels.at(i));
-            x += 70;
+            const QString text = latest
+                    ? QStringLiteral("%1 %2").arg(labels.at(i), formatValue(i, sampleValue(*latest, i)))
+                    : labels.at(i);
+            p.drawText(QRectF(x + 10, y - 10, 112, 20), Qt::AlignVCenter, text);
+            x += 124;
         }
+    }
+
+    void drawStats(QPainter &p, const QRectF &canvas)
+    {
+        const QStringList labels = {
+            QStringLiteral("温度"), QStringLiteral("湿度"),
+            QStringLiteral("亮度"), QStringLiteral("空气")
+        };
+        const qreal right = canvas.right() - 18;
+        const QRectF panel(right - 284, canvas.top() + 14, 284, 94);
+        p.setPen(QPen(QColor(97, 230, 255, 70), 1));
+        p.setBrush(QColor(6, 24, 31, 180));
+        p.drawRoundedRect(panel, 8, 8);
+
+        p.setPen(QColor("#9bdce2"));
+        p.setFont(QFont("Microsoft YaHei UI", 8));
+        p.drawText(panel.adjusted(12, 6, -12, -68),
+                   Qt::AlignLeft | Qt::AlignVCenter, QStringLiteral("最近30分钟统计"));
+
+        const int count = qMax(1, m_samples.size());
+        QStringList lines;
+        for (int i = 0; i < labels.size(); ++i) {
+            double minValue = sampleValue(m_samples.first(), i);
+            double maxValue = minValue;
+            double total = 0.0;
+            for (const TrendSample &sample : m_samples) {
+                const double value = sampleValue(sample, i);
+                minValue = qMin(minValue, value);
+                maxValue = qMax(maxValue, value);
+                total += value;
+            }
+            lines << QStringLiteral("%1 均%2  高%3  低%4")
+                     .arg(labels.at(i),
+                          formatValue(i, total / count),
+                          formatValue(i, maxValue),
+                          formatValue(i, minValue));
+        }
+
+        p.setPen(QColor("#e6fff8"));
+        p.setFont(QFont("Microsoft YaHei UI", 8));
+        for (int i = 0; i < lines.size(); ++i) {
+            const QRectF item(panel.left() + 12,
+                              panel.top() + 27 + i * 15,
+                              panel.width() - 24, 14);
+            p.drawText(item, Qt::AlignLeft | Qt::AlignVCenter, lines.at(i));
+        }
+    }
+
+    template <typename PointGetter>
+    void drawHover(QPainter &p, const QRectF &plot, PointGetter pointFor)
+    {
+        if (m_hoverIndex < 0 || m_hoverIndex >= m_samples.size())
+            return;
+
+        const TrendSample &sample = m_samples.at(m_hoverIndex);
+        const qreal x = pointFor(m_hoverIndex, 50).x();
+        p.setPen(QPen(QColor(185, 255, 238, 120), 1, Qt::DashLine));
+        p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+
+        const QList<QColor> colors = seriesColors();
+        for (int i = 0; i < colors.size(); ++i) {
+            const QPointF point = pointFor(m_hoverIndex, sampleValue(sample, i));
+            p.setPen(QPen(QColor("#07131f"), 3));
+            p.setBrush(colors.at(i));
+            p.drawEllipse(point, 5, 5);
+        }
+
+        QStringList lines;
+        lines << sample.timestamp.toString(QStringLiteral("HH:mm:ss"));
+        lines << QStringLiteral("温度 %1").arg(formatValue(0, sample.temperature));
+        lines << QStringLiteral("湿度 %1").arg(formatValue(1, sample.humidity));
+        lines << QStringLiteral("亮度 %1").arg(formatValue(2, sample.brightness));
+        lines << QStringLiteral("空气 %1").arg(formatValue(3, sample.airQuality));
+
+        const QSizeF bubbleSize(154, 112);
+        QPointF bubbleTopLeft(m_mousePos.x() + 14, m_mousePos.y() - bubbleSize.height() - 12);
+        if (bubbleTopLeft.x() + bubbleSize.width() > plot.right())
+            bubbleTopLeft.setX(m_mousePos.x() - bubbleSize.width() - 14);
+        if (bubbleTopLeft.y() < plot.top())
+            bubbleTopLeft.setY(m_mousePos.y() + 14);
+        const QRectF bubble(bubbleTopLeft, bubbleSize);
+
+        p.setPen(QPen(QColor(118, 255, 221, 150), 1));
+        p.setBrush(QColor(5, 18, 26, 235));
+        p.drawRoundedRect(bubble, 8, 8);
+        p.setPen(QColor("#ecfff8"));
+        p.setFont(QFont("Microsoft YaHei UI", 9));
+        p.drawText(bubble.adjusted(12, 8, -10, -8),
+                   Qt::AlignLeft | Qt::AlignTop, lines.join('\n'));
+    }
+
+    QList<QColor> seriesColors() const
+    {
+        return {
+            QColor("#ffb86b"), QColor("#66d7f2"),
+            QColor("#ffe178"), QColor("#a978f0")
+        };
     }
 
 private:
     QVector<TrendSample> m_samples;
+    QRectF m_plotRect;
+    QPoint m_mousePos;
+    int m_hoverIndex = -1;
 };
 
 static QString airQualityText(const QString &status, int percent)
