@@ -69,6 +69,7 @@ private:
     QTimer m_bridgeRestartTimer;
     QByteArray m_stdoutBuffer;
     QJsonObject m_mockState;
+    int m_receivedTelemetryCount = 0;
     bool m_stopping = false;
 };
 

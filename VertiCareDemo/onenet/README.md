@@ -3,12 +3,14 @@
 优先导入：
 
 ```text
-VertiCareDemo/onenet/verticare_thing_model.json
+VertiCareDemo/onenet/verticare_thing_model_control.json
 ```
 
-这份文件和 Arduino Demo 里的上报字段保持一致。
+这份文件和 Arduino Demo 里的上报字段、Qt控制字段保持一致。
 
-## 第一阶段必须用到的属性
+完整通信链路说明见：[`../../docs/ONENET_ARCHITECTURE.md`](../../docs/ONENET_ARCHITECTURE.md)。
+
+## 当前 demo 必须用到的属性
 
 当前代码只上报 `properties` 里的字段：
 
@@ -21,10 +23,33 @@ VertiCareDemo/onenet/verticare_thing_model.json
 | `rainDetected` | bool | 是 |
 | `vibrationDetected` | bool | 是 |
 | `maintenanceEvent` | bool | 是 |
+| `lastEventType` | string | 是 |
+| `lastEventLevel` | string | 是 |
+| `lastEventMessage` | string | 是 |
+| `lastEventTime` | int | 是 |
+| `eventSequence` | int | 是 |
 | `irrigationState` | bool | 是 |
 | `servoAngle` | int | 是 |
+| `rfidEnrollMode` | bool | 是 |
+| `rfidAuthorized` | bool | 是 |
+| `authorizedCardCount` | int | 是 |
+| `currentOperatorId` | string | 是 |
+| `lastAccessEvent` | string | 是 |
+| `lastCardUid` | string | 是 |
+| `authRemainingSec` | int | 是 |
 
 `services` 和 `events` 是给下一轮双向通信预留的。第一版如果 OneNet 导入时嫌服务或事件格式不匹配，可以先只导入/创建属性。
+
+## 可写控制属性
+
+| 标识符 | 类型 | 说明 |
+| --- | --- | --- |
+| `controlMode` | int | 0为自动，1为手动 |
+| `manualIrrigation` | bool | 手动模式下的灌溉开关 |
+| `openThreshold` | float | 自动灌溉开启湿度阈值 |
+| `closeThreshold` | float | 自动灌溉关闭湿度阈值 |
+
+Qt 上位机只会下发这四个属性，其余属性均由 ESP32 上报。
 
 ## OneNet 控制台注意点
 

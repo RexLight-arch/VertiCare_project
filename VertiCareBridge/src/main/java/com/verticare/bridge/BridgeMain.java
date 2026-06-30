@@ -11,6 +11,7 @@ import org.apache.pulsar.client.api.SubscriptionType;
 import javax.crypto.Cipher;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.FileInputStream;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -23,6 +24,15 @@ import java.util.concurrent.TimeUnit;
 public final class BridgeMain {
     private static final String DEFAULT_BROKER =
             "pulsar+ssl://iot-north-mq.heclouds.com:6651/";
+    private static final PrintStream JSON_OUT;
+
+    static {
+        try {
+            JSON_OUT = new PrintStream(System.out, true, "UTF-8");
+        } catch (Exception exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
+    }
 
     private BridgeMain() {
     }
@@ -48,18 +58,6 @@ public final class BridgeMain {
 
         long reconnectDelayMs = Long.parseLong(
                 config.getProperty("reconnectDelayMs", "5000").trim());
-
-        Thread parentMonitor = new Thread(() -> {
-            try {
-                while (System.in.read() != -1) {
-                    // Keep waiting while the Qt parent process owns the pipe.
-                }
-            } catch (Exception ignored) {
-            }
-            System.exit(0);
-        }, "qt-parent-monitor");
-        parentMonitor.setDaemon(true);
-        parentMonitor.start();
 
         while (true) {
             try {
@@ -136,8 +134,8 @@ public final class BridgeMain {
             output.put("deviceName", subData.getString("deviceName"));
             output.put("receivedAt", System.currentTimeMillis());
             output.put("params", subData.getJSONObject("params"));
-            System.out.println(output.toJSONString());
-            System.out.flush();
+            JSON_OUT.println(output.toJSONString());
+            JSON_OUT.flush();
             consumer.acknowledge(message);
         } catch (Exception exception) {
             System.err.println("Dropped malformed message: "

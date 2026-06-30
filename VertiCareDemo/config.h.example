@@ -23,7 +23,7 @@ static const uint16_t MQTT_PORT = 1883;
 static const char *MQTT_CLIENT_ID = "YOUR_DEVICE_NAME";
 static const char *MQTT_USERNAME = "YOUR_PRODUCT_ID";
 static const char *MQTT_PASSWORD = "YOUR_DEVICE_TOKEN";
-static const int MQTT_BUFFER_SIZE = 1024;
+static const int MQTT_BUFFER_SIZE = 2048;
 static const unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 
 // Replace product id and device name after creating the OneNet device.
@@ -38,28 +38,55 @@ static const char *ONENET_PROPERTY_SET_REPLY_TOPIC =
 static const uint8_t DHT_PIN = 4;
 static const uint8_t LIGHT_ADC_PIN = 0;
 static const uint8_t RAIN_ADC_PIN = 1;
+static const uint8_t MQ135_ADC_PIN = 2;
+static const uint8_t FLAME_DIGITAL_PIN = 3;
 static const uint8_t RAIN_DIGITAL_PIN = 5;
 static const uint8_t VIBRATION_PIN = 6;
+static const uint8_t TILT_DIGITAL_PIN = 7;
+static const uint8_t RFID_RST_PIN = 11;
+static const uint8_t TOUCH_PIN = 12;
 static const uint8_t SERVO_PIN = 10;
+static const uint8_t RFID_SS_PIN = 18;
+static const uint8_t RFID_SCK_PIN = 19;
+static const uint8_t RFID_MOSI_PIN = 20;
+static const uint8_t RFID_MISO_PIN = 21;
 
 // Module active levels. Change these if your module reports the opposite logic.
 static const uint8_t RAIN_DIGITAL_ACTIVE_LEVEL = LOW;
 static const uint8_t VIBRATION_ACTIVE_LEVEL = LOW;
+static const uint8_t FLAME_ACTIVE_LEVEL = LOW;
+static const uint8_t TILT_ACTIVE_LEVEL = LOW;
+static const uint8_t TOUCH_ACTIVE_LEVEL = HIGH;
 static const bool RAIN_DIGITAL_USE_PULLUP = true;
 static const bool VIBRATION_USE_PULLUP = true;
+static const bool FLAME_USE_PULLUP = true;
+static const bool TILT_USE_PULLUP = true;
+static const bool TOUCH_USE_PULLDOWN = false;
 
 // Sampling and upload intervals.
 static const unsigned long SENSOR_READ_INTERVAL_MS = 2000;
 static const unsigned long MQTT_PUBLISH_INTERVAL_MS = 5000;
 static const uint8_t DHT_FAILURE_LIMIT = 3;
 static const uint8_t RAIN_ADC_FAILURE_LIMIT = 3;
+static const uint8_t MQ135_ADC_FAILURE_LIMIT = 3;
 static const int ADC_HEALTH_MIN = 5;
 static const int ADC_HEALTH_MAX = 4090;
 // SW-420 pulse filtering. GPIO interrupt captures short LOW pulses.
 static const unsigned long VIBRATION_PULSE_DEBOUNCE_US = 30000;
 static const unsigned long VIBRATION_WINDOW_MS = 2000;
 static const uint8_t VIBRATION_MIN_PULSES = 2;
+static const uint8_t MAINTENANCE_CONFIRM_WINDOWS = 2;
 static const unsigned long MAINTENANCE_EVENT_HOLD_MS = 10000;
+static const unsigned long EVENT_CRITICAL_COOLDOWN_MS = 30000;
+static const unsigned long EVENT_WARNING_COOLDOWN_MS = 30000;
+static const unsigned long EVENT_NOTICE_COOLDOWN_MS = 60000;
+static const uint8_t RFID_MAX_CARDS = 5;
+static const unsigned long RFID_ENROLL_TIMEOUT_MS = 15000;
+static const unsigned long RFID_AUTH_VALID_MS = 600000;
+static const unsigned long TOUCH_SHORT_MIN_MS = 60;
+static const unsigned long TOUCH_ENROLL_HOLD_MS = 3000;
+static const unsigned long TOUCH_CLEAR_HOLD_MS = 8000;
+static const unsigned long TOUCH_RELEASE_DEBOUNCE_MS = 250;
 
 // Thresholds. Tune these with Serial Monitor readings after wiring.
 static const int CONTROL_MODE_AUTO = 0;
@@ -71,6 +98,13 @@ static const int LIGHT_HIGH_THRESHOLD = 3200;
 static const bool LIGHT_ADC_HIGH_MEANS_DARK = true;
 static const int LIGHT_BRIGHT_THRESHOLD = 1200;
 static const int LIGHT_DARK_THRESHOLD = 3200;
+static const int MQ135_CLEAN_RAW = 80;
+static const int MQ135_POOR_RAW = 350;
+static const int AIR_QUALITY_WARN_PERCENT = 65;
+static const int AIR_QUALITY_ALERT_PERCENT = 85;
+static const uint8_t MQ135_ADC_SAMPLE_COUNT = 9;
+static const uint8_t SAFETY_ACTIVE_CONFIRM_SAMPLES = 1;
+static const uint8_t SAFETY_CLEAR_CONFIRM_SAMPLES = 2;
 // Rain detection calibrates its dry baseline after startup.
 // With RAIN_ANALOG_WET_WHEN_LOW=true, rain is confirmed only after the ADC
 // drops far enough below that baseline.

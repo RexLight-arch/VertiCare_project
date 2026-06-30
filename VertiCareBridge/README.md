@@ -32,3 +32,13 @@ java -jar target/verticare-bridge.jar bridge.properties
 ```
 
 `bridge.properties`包含消费组Key，已被Git忽略。
+
+## 在项目中的位置
+
+Bridge 是 Qt 上位机和 OneNet 服务端订阅之间的适配层：
+
+```text
+OneNet 服务端订阅 -> Pulsar -> VertiCareBridge -> Qt 标准输出解析
+```
+
+完整架构说明见：[`../docs/ONENET_ARCHITECTURE.md`](../docs/ONENET_ARCHITECTURE.md)。

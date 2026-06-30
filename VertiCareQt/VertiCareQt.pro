@@ -6,6 +6,8 @@ CONFIG += c++11
 
 TARGET = VertiCareQt
 TEMPLATE = app
+VERSION = 1.5.0
+RC_ICONS = app.ico
 
 SOURCES += \
     main.cpp \
@@ -15,3 +17,6 @@ SOURCES += \
 HEADERS += \
     mainwindow.h \
     onenetclient.h
+
+RESOURCES += \
+    resources.qrc

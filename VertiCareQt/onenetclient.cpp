@@ -139,9 +139,14 @@ void OneNetClient::startBridge()
     }
 
     m_stdoutBuffer.clear();
+    m_receivedTelemetryCount = 0;
     m_bridge.setProgram(m_config.javaPath);
     m_bridge.setArguments(QStringList() << "-jar" << jar << bridgeConfig);
     m_bridge.setWorkingDirectory(QFileInfo(jar).absolutePath());
+    emit logMessage(QStringLiteral("启动 Bridge: java=%1")
+                    .arg(m_config.javaPath));
+    emit logMessage(QStringLiteral("Bridge jar: %1").arg(jar));
+    emit logMessage(QStringLiteral("Bridge config: %1").arg(bridgeConfig));
     m_bridge.start();
     emit bridgeStateChanged(false, QStringLiteral("正在连接 OneNet 数据服务"));
 }
@@ -250,6 +255,12 @@ void OneNetClient::readBridgeOutput()
         const QJsonObject params = root.value("params").toObject();
         const QJsonObject telemetry = normalizeTelemetry(params);
         if (!telemetry.isEmpty()) {
+            ++m_receivedTelemetryCount;
+            if (m_receivedTelemetryCount <= 3 ||
+                    m_receivedTelemetryCount % 20 == 0) {
+                emit logMessage(QStringLiteral("已收到 OneNet 遥测 #%1")
+                                .arg(m_receivedTelemetryCount));
+            }
             emit telemetryReceived(telemetry);
             emit bridgeStateChanged(true, QStringLiteral("OneNet 实时数据"));
         }
@@ -324,10 +335,18 @@ QJsonObject OneNetClient::normalizeTelemetry(const QJsonObject &source) const
     QJsonObject telemetry;
     const QStringList keys = {
         "temperature", "airHumidity", "lightValue", "lightStatus",
+        "mq135Value", "airQualityPercent", "airQualityStatus",
         "rainDetected", "vibrationDetected", "maintenanceEvent",
+        "flameDetected", "tiltDetected", "safetyAlert",
+        "lastEventType", "lastEventLevel", "lastEventMessage",
+        "lastEventTime", "eventSequence",
         "irrigationState", "servoAngle", "controlMode",
         "manualIrrigation", "openThreshold", "closeThreshold",
-        "dhtHealthy", "rainSensorHealthy", "sensorHealthy"
+        "rfidEnrollMode", "rfidAuthorized", "authorizedCardCount",
+        "currentOperatorId", "lastAccessEvent", "lastCardUid",
+        "authRemainingSec",
+        "dhtHealthy", "rainSensorHealthy", "mq135Healthy",
+        "sensorHealthy"
     };
     for (const QString &key : keys) {
         if (source.contains(key))
@@ -353,17 +372,36 @@ QJsonObject OneNetClient::mockTelemetry() const
     object.insert("airHumidity", 42.0);
     object.insert("lightValue", 2400);
     object.insert("lightStatus", "normal");
+    object.insert("mq135Value", 1200);
+    object.insert("airQualityPercent", 18);
+    object.insert("airQualityStatus", "good");
     object.insert("rainDetected", false);
     object.insert("vibrationDetected", false);
+    object.insert("flameDetected", false);
+    object.insert("tiltDetected", false);
+    object.insert("safetyAlert", false);
     object.insert("maintenanceEvent", false);
+    object.insert("lastEventType", "system");
+    object.insert("lastEventLevel", "info");
+    object.insert("lastEventMessage", "演示数据运行中");
+    object.insert("lastEventTime", 0);
+    object.insert("eventSequence", 1);
     object.insert("irrigationState", false);
     object.insert("servoAngle", 0);
     object.insert("controlMode", 0);
     object.insert("manualIrrigation", false);
     object.insert("openThreshold", 45.0);
     object.insert("closeThreshold", 60.0);
+    object.insert("rfidEnrollMode", false);
+    object.insert("rfidAuthorized", false);
+    object.insert("authorizedCardCount", 0);
+    object.insert("currentOperatorId", "未认证");
+    object.insert("lastAccessEvent", "待机");
+    object.insert("lastCardUid", "");
+    object.insert("authRemainingSec", 0);
     object.insert("dhtHealthy", true);
     object.insert("rainSensorHealthy", true);
+    object.insert("mq135Healthy", true);
     object.insert("sensorHealthy", true);
     return object;
 }

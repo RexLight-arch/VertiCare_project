@@ -12,6 +12,7 @@
 
 class QCheckBox;
 class QDoubleSpinBox;
+class QListWidget;
 class QRadioButton;
 class QPushButton;
 class PlantSceneWidget;
@@ -35,6 +36,9 @@ private:
     QWidget *buildMetricCard(const QString &key, const QString &name,
                              const QString &unit, const QString &accent);
     QWidget *buildControlPanel();
+    QWidget *buildEventPage();
+    void appendEvent(const QString &type, const QString &level,
+                     const QString &message);
     void setMetric(const QString &key, const QString &value);
     void setConnectionState(bool online, const QString &message,
                             const QString &color = QString());
@@ -54,6 +58,7 @@ private:
     QLabel *m_updatedAt = nullptr;
     QLabel *m_modeBadge = nullptr;
     QLabel *m_commandStatus = nullptr;
+    QListWidget *m_eventList = nullptr;
 
     QRadioButton *m_autoMode = nullptr;
     QRadioButton *m_manualMode = nullptr;
@@ -64,7 +69,9 @@ private:
     QPushButton *m_openButton = nullptr;
     QPushButton *m_closeButton = nullptr;
     QDateTime m_lastTelemetryAt;
+    int m_lastEventSequence = 0;
     bool m_sensorHealthy = true;
+    bool m_safetyAlert = false;
 };
 
 #endif

@@ -52,3 +52,9 @@ Bridge配置参照 `VertiCareBridge/bridge.properties.example`。
 
 上位机会显示实时数据、数据超时和关键传感器异常状态；控制请求期间
 按钮会暂时锁定，并显示设备执行成功、失败或超时结果。
+
+## 相关文档
+
+- OneNet通信架构：[`../docs/ONENET_ARCHITECTURE.md`](../docs/ONENET_ARCHITECTURE.md)
+- 答辩演示流程：[`../docs/DEMO_SCRIPT.md`](../docs/DEMO_SCRIPT.md)
+- 最终验收清单：[`../docs/ACCEPTANCE_CHECKLIST.md`](../docs/ACCEPTANCE_CHECKLIST.md)

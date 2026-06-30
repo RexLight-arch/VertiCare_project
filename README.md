@@ -7,13 +7,17 @@
 - DHT11采集环境温度和空气湿度
 - 光敏电阻采集环境亮度
 - MH-RD雨滴模块检测雨水，并进行自动干燥基线校准
-- SW-420通过GPIO中断捕获振动，过滤短时毛刺
+- SW-420通过GPIO中断捕获振动，按连续活动窗口判断维护状态
+- MQ-135监测空气质量趋势
+- 火焰传感器和SW-520D倾斜传感器提供安全告警
+- RC522 RFID和TTP223提供维护人员录入、认证和本地触摸交互
 - SG90模拟滴灌阀门
 - ESP32-C6通过MQTT向OneNet上报物模型属性
 - OneNet服务端订阅通过Pulsar向Java Bridge推送数据
 - Qt上位机显示实时状态，并通过OneNet HTTP API控制设备
 - 支持自动灌溉、手动灌溉和远程阈值设置
 - 支持关键传感器健康检测、断线自动恢复和Qt数据超时提示
+- 支持告警事件生成、事件冷却和Qt事件中心展示
 
 ## 项目结构
 
@@ -21,6 +25,7 @@
 VertiCareDemo/     ESP32-C6 Arduino固件和OneNet物模型
 VertiCareBridge/   OneNet Pulsar消息接收、验签和解密服务
 VertiCareQt/       Qt 5.12上位机
+docs/              最终接线、答辩演示流程和常见问题排查
 ```
 
 ## 通信架构
@@ -48,6 +53,19 @@ mvn -f VertiCareBridge/pom.xml -DskipTests package
    `config.ini`，填写产品Access Key，将 `mockMode` 设置为 `false`。
 
 真实配置文件均已加入 `.gitignore`，不要将密钥提交到GitHub。
+
+## 答辩资料
+
+- [最终硬件接线表](docs/FINAL_WIRING.md)
+- [答辩演示流程](docs/DEMO_SCRIPT.md)
+- [常见问题排查](docs/TROUBLESHOOTING.md)
+- [OneNet通信架构说明](docs/ONENET_ARCHITECTURE.md)
+- [最终验收清单](docs/ACCEPTANCE_CHECKLIST.md)
+- [发布说明](docs/RELEASE_NOTES.md)
+- [GitHub提交指南](docs/GITHUB_SUBMISSION.md)
+
+建议现场演示顺序：启动自检、自动灌溉、雨滴抑制、RFID授权维护、
+未授权维护告警、火焰/倾斜安全告警、Qt事件中心汇总。
 
 ## 已验证环境
 

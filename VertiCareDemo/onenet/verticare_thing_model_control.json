@@ -67,6 +67,51 @@
       "description": "Classified light level: low, normal, or high."
     },
     {
+      "identifier": "mq135Value",
+      "functionType": "u",
+      "name": "空气质量原始值",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 4095,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "MQ-135 ADC raw value after voltage divider.",
+      "unit": "ADC"
+    },
+    {
+      "identifier": "airQualityPercent",
+      "functionType": "u",
+      "name": "通风指数",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 100,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "User-facing ventilation index from MQ-135. Higher means ventilation is more needed.",
+      "unit": "%"
+    },
+    {
+      "identifier": "airQualityStatus",
+      "functionType": "u",
+      "name": "空气状态",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 16
+        }
+      },
+      "accessMode": "r",
+      "description": "Classified MQ-135 status: good, warning, or poor."
+    },
+    {
       "identifier": "rainDetected",
       "functionType": "u",
       "name": "是否下雨",
@@ -83,16 +128,58 @@
     {
       "identifier": "vibrationDetected",
       "functionType": "u",
-      "name": "当前振动",
+      "name": "维护活动",
       "dataType": {
         "type": "bool",
         "specs": {
-          "false": "无振动",
-          "true": "有振动"
+          "false": "待机",
+          "true": "维护中"
         }
       },
       "accessMode": "r",
-      "description": "Current SW-420 vibration digital state."
+      "description": "Confirmed maintenance activity inferred from sustained SW-420 vibration pulses."
+    },
+    {
+      "identifier": "flameDetected",
+      "functionType": "u",
+      "name": "火焰告警",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "正常",
+          "true": "检测到火焰"
+        }
+      },
+      "accessMode": "r",
+      "description": "Flame sensor digital alarm after confirmation filtering."
+    },
+    {
+      "identifier": "tiltDetected",
+      "functionType": "u",
+      "name": "倾斜告警",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "正常",
+          "true": "发生倾斜"
+        }
+      },
+      "accessMode": "r",
+      "description": "SW-520D tilt alarm after confirmation filtering."
+    },
+    {
+      "identifier": "safetyAlert",
+      "functionType": "u",
+      "name": "安全告警",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "正常",
+          "true": "告警"
+        }
+      },
+      "accessMode": "r",
+      "description": "Combined safety alarm from flame, tilt, and poor air quality."
     },
     {
       "identifier": "maintenanceEvent",
@@ -106,7 +193,76 @@
         }
       },
       "accessMode": "r",
-      "description": "A debounced vibration/maintenance event held for a short display window."
+      "description": "A confirmed maintenance event held for a short display window."
+    },
+    {
+      "identifier": "lastEventType",
+      "functionType": "u",
+      "name": "最近事件类型",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 32
+        }
+      },
+      "accessMode": "r",
+      "description": "Latest event type: flame, tilt, vibration, air, rain, or system."
+    },
+    {
+      "identifier": "lastEventLevel",
+      "functionType": "u",
+      "name": "最近事件等级",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 16
+        }
+      },
+      "accessMode": "r",
+      "description": "Latest event level: critical, warning, notice, or info."
+    },
+    {
+      "identifier": "lastEventMessage",
+      "functionType": "u",
+      "name": "最近事件说明",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 128
+        }
+      },
+      "accessMode": "r",
+      "description": "Human-readable latest event message for the Qt event center."
+    },
+    {
+      "identifier": "lastEventTime",
+      "functionType": "u",
+      "name": "最近事件时间",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 2147483647,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "Latest event uptime timestamp in seconds."
+    },
+    {
+      "identifier": "eventSequence",
+      "functionType": "u",
+      "name": "事件序号",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 2147483647,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "Monotonic sequence number. It increases only when a new event is recorded."
     },
     {
       "identifier": "irrigationState",
@@ -200,6 +356,103 @@
       "unit": "%"
     },
     {
+      "identifier": "rfidEnrollMode",
+      "functionType": "u",
+      "name": "录卡模式",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "关闭",
+          "true": "开启"
+        }
+      },
+      "accessMode": "r",
+      "description": "Whether the device is waiting for a card to enroll."
+    },
+    {
+      "identifier": "rfidAuthorized",
+      "functionType": "u",
+      "name": "身份授权",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "未授权",
+          "true": "已授权"
+        }
+      },
+      "accessMode": "r",
+      "description": "Whether the latest RFID card is authorized."
+    },
+    {
+      "identifier": "authorizedCardCount",
+      "functionType": "u",
+      "name": "已录入人数",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 5,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "Number of authorized maintenance cards stored locally."
+    },
+    {
+      "identifier": "currentOperatorId",
+      "functionType": "u",
+      "name": "当前人员",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 32
+        }
+      },
+      "accessMode": "r",
+      "description": "Current authorized operator label, such as Operator 1."
+    },
+    {
+      "identifier": "lastAccessEvent",
+      "functionType": "u",
+      "name": "最近刷卡事件",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 128
+        }
+      },
+      "accessMode": "r",
+      "description": "Latest RFID or touch interaction event."
+    },
+    {
+      "identifier": "lastCardUid",
+      "functionType": "u",
+      "name": "最近卡号",
+      "dataType": {
+        "type": "string",
+        "specs": {
+          "length": 32
+        }
+      },
+      "accessMode": "r",
+      "description": "Latest RFID card UID read by the RC522 module."
+    },
+    {
+      "identifier": "authRemainingSec",
+      "functionType": "u",
+      "name": "授权剩余时间",
+      "dataType": {
+        "type": "int32",
+        "specs": {
+          "min": 0,
+          "max": 3600,
+          "step": 1
+        }
+      },
+      "accessMode": "r",
+      "description": "Remaining authorization time in seconds."
+    },
+    {
       "identifier": "dhtHealthy",
       "functionType": "u",
       "name": "温湿度传感器状态",
@@ -226,6 +479,20 @@
       },
       "accessMode": "r",
       "description": "Rain sensor ADC and dry-baseline health status."
+    },
+    {
+      "identifier": "mq135Healthy",
+      "functionType": "u",
+      "name": "空气质量传感器状态",
+      "dataType": {
+        "type": "bool",
+        "specs": {
+          "false": "异常",
+          "true": "正常"
+        }
+      },
+      "accessMode": "r",
+      "description": "MQ-135 ADC health status after consecutive read validation."
     },
     {
       "identifier": "sensorHealthy",
