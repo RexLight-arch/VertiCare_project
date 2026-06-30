@@ -6,10 +6,12 @@
 #include <QDateTime>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QFileDialog>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonValue>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPainter>
@@ -17,12 +19,15 @@
 #include <QPushButton>
 #include <QDebug>
 #include <QRadioButton>
+#include <QScrollArea>
+#include <QSpinBox>
 #include <QStringList>
 #include <QTabWidget>
 #include <QtMath>
+#include <QMessageBox>
 #include <QVBoxLayout>
 
-static const char *APP_VERSION = "v1.5-polish";
+static const char *APP_VERSION = "v1.6-local-history";
 
 class PlantSceneWidget : public QWidget
 {
@@ -277,6 +282,146 @@ private:
     int m_servoAngle = 0;
 };
 
+class TrendChartWidget : public QWidget
+{
+public:
+    explicit TrendChartWidget(QWidget *parent = nullptr)
+        : QWidget(parent)
+    {
+        setMinimumHeight(360);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
+
+    void setSamples(const QVector<TrendSample> &samples)
+    {
+        m_samples = samples;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+
+        const QRectF canvas = rect().adjusted(12, 12, -12, -12);
+        QLinearGradient background(canvas.topLeft(), canvas.bottomRight());
+        background.setColorAt(0.0, QColor(8, 25, 35, 226));
+        background.setColorAt(1.0, QColor(3, 12, 18, 240));
+        p.setPen(QPen(QColor(84, 235, 255, 92), 1));
+        p.setBrush(background);
+        p.drawRoundedRect(canvas, 8, 8);
+
+        const QRectF plot = canvas.adjusted(54, 72, -28, -44);
+        p.setPen(QPen(QColor(93, 255, 202, 45), 1));
+        for (int i = 0; i <= 4; ++i) {
+            const qreal y = plot.top() + plot.height() * i / 4.0;
+            p.drawLine(QPointF(plot.left(), y), QPointF(plot.right(), y));
+        }
+        for (int i = 0; i <= 6; ++i) {
+            const qreal x = plot.left() + plot.width() * i / 6.0;
+            p.drawLine(QPointF(x, plot.top()), QPointF(x, plot.bottom()));
+        }
+
+        p.setPen(QColor("#d9fff1"));
+        p.setFont(QFont("Microsoft YaHei UI", 13, QFont::Bold));
+        p.drawText(QRectF(canvas.left() + 18, canvas.top() + 12,
+                          qMin<qreal>(canvas.width() * 0.55, 360), 24),
+                   Qt::AlignLeft | Qt::AlignVCenter,
+                   QStringLiteral("实时趋势 · 最近30分钟窗口"));
+
+        if (m_samples.isEmpty()) {
+            p.setPen(QColor("#8dd9e2"));
+            p.setFont(QFont("Microsoft YaHei UI", 12));
+            p.drawText(plot, Qt::AlignCenter,
+                       QStringLiteral("收到第一条数据后开始绘制"));
+            drawLegend(p, canvas);
+            return;
+        }
+
+        const QDateTime start = m_samples.first().timestamp;
+        const qint64 span = qMax<qint64>(1, start.secsTo(m_samples.last().timestamp));
+        auto pointFor = [&](int index, double value) {
+            const qreal x = plot.left() + plot.width() *
+                    start.secsTo(m_samples.at(index).timestamp) / span;
+            const qreal y = plot.bottom() - plot.height() * qBound(0.0, value, 100.0) / 100.0;
+            return QPointF(x, y);
+        };
+
+        if (m_samples.size() == 1) {
+            drawPoint(p, plot, QColor("#ffb86b"), m_samples.first().temperature);
+            drawPoint(p, plot, QColor("#66d7f2"), m_samples.first().humidity);
+            drawPoint(p, plot, QColor("#ffe178"), m_samples.first().brightness);
+            drawPoint(p, plot, QColor("#a978f0"), m_samples.first().airQuality);
+        } else {
+            drawSeries(p, plot, QColor("#ffb86b"), [&](int i) { return m_samples.at(i).temperature; }, pointFor);
+            drawSeries(p, plot, QColor("#66d7f2"), [&](int i) { return m_samples.at(i).humidity; }, pointFor);
+            drawSeries(p, plot, QColor("#ffe178"), [&](int i) { return m_samples.at(i).brightness; }, pointFor);
+            drawSeries(p, plot, QColor("#a978f0"), [&](int i) { return m_samples.at(i).airQuality; }, pointFor);
+        }
+
+        p.setPen(QColor("#8dd9e2"));
+        p.setFont(QFont("Microsoft YaHei UI", 9));
+        p.drawText(QRectF(plot.left(), plot.bottom() + 12, 120, 20),
+                   Qt::AlignLeft, m_samples.first().timestamp.toString("HH:mm"));
+        p.drawText(QRectF(plot.right() - 120, plot.bottom() + 12, 120, 20),
+                   Qt::AlignRight, m_samples.last().timestamp.toString("HH:mm"));
+        drawLegend(p, canvas);
+    }
+
+private:
+    template <typename ValueGetter, typename PointGetter>
+    void drawSeries(QPainter &p, const QRectF &, const QColor &color,
+                    ValueGetter value, PointGetter pointFor)
+    {
+        QPainterPath path;
+        for (int i = 0; i < m_samples.size(); ++i) {
+            const QPointF point = pointFor(i, value(i));
+            if (i == 0)
+                path.moveTo(point);
+            else
+                path.lineTo(point);
+        }
+        p.setPen(QPen(color, 2.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.drawPath(path);
+    }
+
+    void drawPoint(QPainter &p, const QRectF &plot, const QColor &color, double value)
+    {
+        const QPointF point(plot.center().x(),
+                            plot.bottom() - plot.height() * qBound(0.0, value, 100.0) / 100.0);
+        p.setPen(QPen(color.lighter(130), 2));
+        p.setBrush(color);
+        p.drawEllipse(point, 5.5, 5.5);
+    }
+
+    void drawLegend(QPainter &p, const QRectF &canvas)
+    {
+        const QStringList labels = {
+            QStringLiteral("温度"), QStringLiteral("湿度"),
+            QStringLiteral("亮度"), QStringLiteral("通风")
+        };
+        const QList<QColor> colors = {
+            QColor("#ffb86b"), QColor("#66d7f2"),
+            QColor("#ffe178"), QColor("#a978f0")
+        };
+        qreal x = canvas.left() + 22;
+        const qreal y = canvas.top() + 54;
+        p.setFont(QFont("Microsoft YaHei UI", 10, QFont::Bold));
+        for (int i = 0; i < labels.size(); ++i) {
+            p.setPen(Qt::NoPen);
+            p.setBrush(colors.at(i));
+            p.drawEllipse(QPointF(x, y), 4, 4);
+            p.setPen(QColor("#d9fff1"));
+            p.drawText(QRectF(x + 10, y - 9, 48, 18), Qt::AlignVCenter, labels.at(i));
+            x += 70;
+        }
+    }
+
+private:
+    QVector<TrendSample> m_samples;
+};
+
 static QString airQualityText(const QString &status, int percent)
 {
     if (status == "poor" || percent >= 85)
@@ -346,11 +491,15 @@ MainWindow::MainWindow(QWidget *parent)
         defaults.mockMode = true;
         m_client.setConfig(defaults);
     }
+    loadSettingsToUi();
+    initializeStore();
 
     setWindowTitle(QStringLiteral("VertiCare 垂直绿化管家 %1").arg(APP_VERSION));
     setMinimumSize(1080, 700);
     m_pollTimer.start(m_client.config().pollIntervalMs);
     m_healthTimer.start(1000);
+    if (m_client.config().autoStartBridge && !m_client.config().mockMode)
+        m_client.startBridge();
     refreshTelemetry();
 }
 
@@ -359,8 +508,8 @@ void MainWindow::buildUi()
     QWidget *central = new QWidget(this);
     central->setObjectName("appRoot");
     QVBoxLayout *root = new QVBoxLayout(central);
-    root->setContentsMargins(28, 22, 28, 26);
-    root->setSpacing(20);
+    root->setContentsMargins(26, 20, 26, 24);
+    root->setSpacing(16);
 
     QHBoxLayout *header = new QHBoxLayout;
     QVBoxLayout *titles = new QVBoxLayout;
@@ -445,22 +594,26 @@ void MainWindow::buildUi()
     tabs->addTab(safetyPage, QStringLiteral("安全"));
     tabs->addTab(identityPage, QStringLiteral("人员"));
     tabs->addTab(controlPage, QStringLiteral("控制"));
+    tabs->addTab(buildTrendPage(), QStringLiteral("趋势"));
     tabs->addTab(buildEventPage(), QStringLiteral("事件"));
+    tabs->addTab(buildSettingsPage(), QStringLiteral("设置"));
     root->addWidget(tabs, 1);
 
     setCentralWidget(central);
     setStyleSheet(
         "QWidget#appRoot { background: #061016; }"
         "QLabel { color: #d9fff1; font-family: 'Microsoft YaHei UI'; }"
-        "QLabel#appTitle { color: #f2fff9; font-size: 42px; font-weight: 900; }"
+        "QLabel#appTitle { color: #f2fff9; font-size: 38px; font-weight: 900; }"
         "QLabel#appSubtitle { color: #66dff0; font-size: 15px; font-weight: 600; }"
         "QLabel#connectionDot { background: #41ff9d; border-radius: 5px; }"
         "QLabel#connectionText { color: #b5fff0; font-size: 12px; font-weight: 700; }"
         "QLabel#updatedAt { color: #75aeb8; font-size: 12px; }"
+        "QScrollArea { background: transparent; border: none; }"
+        "QScrollArea > QWidget > QWidget { background: transparent; }"
         "QTabWidget::pane { border: none; top: -1px; }"
         "QTabBar::tab { background: rgba(7, 24, 34, 188); color: #78aeb9;"
         " border: 1px solid rgba(79, 211, 255, 74); border-radius: 8px; margin-right: 8px;"
-        " padding: 10px 26px; min-width: 72px; font-size: 13px; font-weight: 800; }"
+        " padding: 9px 18px; min-width: 56px; font-size: 13px; font-weight: 800; }"
         "QTabBar::tab:selected { background: rgba(20, 214, 146, 54); color: #ecfff9;"
         " border-color: #32f3c1; }"
         "QTabBar::tab:hover { background: rgba(29, 88, 100, 188); color: #f2fff9; }"
@@ -469,7 +622,7 @@ void MainWindow::buildUi()
         " border-radius: 8px; }"
         "QFrame#metricCard:hover { background: rgba(11, 39, 48, 224); border-color: #51ffd0; }"
         "QLabel[metricName='true'] { color: #a9e8ec; font-size: 17px; font-weight: 800; }"
-        "QLabel[metricValue='true'] { color: #f1fff9; font-size: 36px; font-weight: 900; }"
+        "QLabel[metricValue='true'] { color: #f1fff9; font-size: 32px; font-weight: 900; }"
         "QLabel[metricUnit='true'] { color: #66dff0; font-size: 13px; font-weight: 800; }"
         "QLabel#panelTitle { color: #f1fff9; font-size: 24px; font-weight: 900; }"
         "QLabel#modeBadge { background: rgba(45, 255, 162, 42); color: #9dffd7;"
@@ -480,6 +633,9 @@ void MainWindow::buildUi()
         "QDoubleSpinBox { background: rgba(2, 13, 19, 220); color: #f1fff9;"
         " border: 1px solid rgba(92, 224, 255, 118); border-radius: 6px; padding: 7px 9px;"
         " min-width: 92px; selection-background-color: #1fdc91; }"
+        "QLineEdit, QSpinBox { background: rgba(2, 13, 19, 220); color: #f1fff9;"
+        " border: 1px solid rgba(92, 224, 255, 118); border-radius: 6px; padding: 7px 9px;"
+        " min-width: 180px; selection-background-color: #1fdc91; }"
         "QPushButton { background: rgba(13, 36, 46, 230); color: #d8fff4;"
         " border: 1px solid rgba(92, 224, 255, 118); border-radius: 7px;"
         " padding: 9px 14px; font-weight: 800; }"
@@ -659,8 +815,207 @@ QWidget *MainWindow::buildEventPage()
     layout->addWidget(m_eventList, 1);
 
     appendEvent(QStringLiteral("system"), QStringLiteral("info"),
-                QStringLiteral("事件中心已就绪"));
+                QStringLiteral("事件中心已就绪"), false);
     return page;
+}
+
+QWidget *MainWindow::buildTrendPage()
+{
+    QWidget *page = new QWidget;
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(14);
+
+    QHBoxLayout *heading = new QHBoxLayout;
+    QLabel *title = new QLabel(QStringLiteral("趋势分析"), page);
+    title->setObjectName("panelTitle");
+    m_storeStatus = new QLabel(QStringLiteral("本地数据准备中"), page);
+    m_storeStatus->setObjectName("modeBadge");
+    QPushButton *exportButton = new QPushButton(QStringLiteral("导出CSV"), page);
+    exportButton->setObjectName("primaryButton");
+    heading->addWidget(title);
+    heading->addStretch();
+    heading->addWidget(m_storeStatus);
+    heading->addWidget(exportButton);
+    layout->addLayout(heading);
+
+    m_trendChart = new TrendChartWidget(page);
+    layout->addWidget(m_trendChart, 1);
+
+    connect(exportButton, &QPushButton::clicked, this, &MainWindow::exportCsv);
+    return page;
+}
+
+QWidget *MainWindow::buildSettingsPage()
+{
+    QWidget *page = new QWidget;
+    QVBoxLayout *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(14);
+
+    QHBoxLayout *heading = new QHBoxLayout;
+    QLabel *title = new QLabel(QStringLiteral("运行参数"), page);
+    title->setObjectName("panelTitle");
+    m_settingsStatus = new QLabel(QStringLiteral("配置保存在本机"), page);
+    m_settingsStatus->setObjectName("modeBadge");
+    heading->addWidget(title);
+    heading->addStretch();
+    heading->addWidget(m_settingsStatus);
+    layout->addLayout(heading);
+
+    QScrollArea *scroll = new QScrollArea(page);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    QWidget *content = new QWidget(scroll);
+    QVBoxLayout *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(14);
+
+    auto makePanel = [&](const QString &titleText) {
+        QFrame *panel = new QFrame(content);
+        panel->setObjectName("controlPanel");
+        QVBoxLayout *panelLayout = new QVBoxLayout(panel);
+        panelLayout->setContentsMargins(18, 15, 18, 16);
+        panelLayout->setSpacing(12);
+        QLabel *panelTitle = new QLabel(titleText, panel);
+        panelTitle->setObjectName("panelTitle");
+        panelTitle->setStyleSheet("font-size: 18px;");
+        panelLayout->addWidget(panelTitle);
+        QGridLayout *grid = new QGridLayout;
+        grid->setHorizontalSpacing(14);
+        grid->setVerticalSpacing(10);
+        grid->setColumnStretch(1, 1);
+        panelLayout->addLayout(grid);
+        return qMakePair(panel, grid);
+    };
+
+    auto addLine = [](QGridLayout *grid, int row, const QString &label,
+                      QLineEdit **edit, QWidget *parent) {
+        QLabel *name = new QLabel(label, parent);
+        *edit = new QLineEdit(parent);
+        grid->addWidget(name, row, 0);
+        grid->addWidget(*edit, row, 1);
+    };
+    auto addSpin = [](QGridLayout *grid, int row, const QString &label,
+                      QSpinBox **spin, int min, int max, int step,
+                      QWidget *parent) {
+        QLabel *name = new QLabel(label, parent);
+        *spin = new QSpinBox(parent);
+        (*spin)->setRange(min, max);
+        (*spin)->setSingleStep(step);
+        (*spin)->setSuffix(QStringLiteral(" ms"));
+        grid->addWidget(name, row, 0);
+        grid->addWidget(*spin, row, 1);
+    };
+
+    QHBoxLayout *topRow = new QHBoxLayout;
+    topRow->setSpacing(14);
+    auto cloud = makePanel(QStringLiteral("云端身份"));
+    auto bridge = makePanel(QStringLiteral("Bridge服务"));
+    addLine(cloud.second, 0, QStringLiteral("产品ID"), &m_productIdEdit, cloud.first);
+    addLine(cloud.second, 1, QStringLiteral("设备名称"), &m_deviceNameEdit, cloud.first);
+    addLine(cloud.second, 2, QStringLiteral("Access Key"), &m_accessKeyEdit, cloud.first);
+    m_accessKeyEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    addLine(bridge.second, 0, QStringLiteral("Java路径"), &m_javaPathEdit, bridge.first);
+    addLine(bridge.second, 1, QStringLiteral("Bridge Jar"), &m_bridgeJarEdit, bridge.first);
+    addLine(bridge.second, 2, QStringLiteral("Bridge配置"), &m_bridgeConfigEdit, bridge.first);
+    topRow->addWidget(cloud.first);
+    topRow->addWidget(bridge.first);
+    contentLayout->addLayout(topRow);
+
+    QHBoxLayout *bottomRow = new QHBoxLayout;
+    bottomRow->setSpacing(14);
+    auto timing = makePanel(QStringLiteral("刷新策略"));
+    auto runtime = makePanel(QStringLiteral("运行模式"));
+    addSpin(timing.second, 0, QStringLiteral("数据轮询"), &m_pollIntervalEdit, 1000, 60000, 500, timing.first);
+    addSpin(timing.second, 1, QStringLiteral("数据超时"), &m_staleTimeoutEdit, 3000, 300000, 1000, timing.first);
+    addSpin(timing.second, 2, QStringLiteral("控制超时"), &m_controlTimeoutEdit, 1000, 60000, 1000, timing.first);
+    addSpin(timing.second, 3, QStringLiteral("Bridge重连"), &m_bridgeRestartEdit, 1000, 60000, 1000, timing.first);
+
+    m_mockModeEdit = new QCheckBox(QStringLiteral("演示数据模式"), runtime.first);
+    m_autoStartBridgeEdit = new QCheckBox(QStringLiteral("开机自动启动Bridge"), runtime.first);
+    runtime.second->addWidget(m_mockModeEdit, 0, 0, 1, 2);
+    runtime.second->addWidget(m_autoStartBridgeEdit, 1, 0, 1, 2);
+    QPushButton *saveButton = new QPushButton(QStringLiteral("保存并应用"), runtime.first);
+    saveButton->setObjectName("primaryButton");
+    QPushButton *startBridgeButton = new QPushButton(QStringLiteral("启动Bridge"), runtime.first);
+    QPushButton *stopBridgeButton = new QPushButton(QStringLiteral("停止Bridge"), runtime.first);
+    runtime.second->addWidget(saveButton, 2, 0, 1, 2);
+    runtime.second->addWidget(startBridgeButton, 3, 0);
+    runtime.second->addWidget(stopBridgeButton, 3, 1);
+    bottomRow->addWidget(timing.first);
+    bottomRow->addWidget(runtime.first);
+    contentLayout->addLayout(bottomRow);
+    contentLayout->addStretch();
+
+    scroll->setWidget(content);
+    layout->addWidget(scroll, 1);
+    layout->addStretch();
+
+    connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveSettings);
+    connect(startBridgeButton, &QPushButton::clicked, &m_client, &OneNetClient::startBridge);
+    connect(stopBridgeButton, &QPushButton::clicked, &m_client, &OneNetClient::stopBridge);
+    loadSettingsToUi();
+    return page;
+}
+
+void MainWindow::loadSettingsToUi()
+{
+    if (!m_productIdEdit)
+        return;
+    const OneNetConfig config = m_client.config();
+    m_productIdEdit->setText(config.productId);
+    m_deviceNameEdit->setText(config.deviceName);
+    m_accessKeyEdit->setText(config.productAccessKey);
+    m_javaPathEdit->setText(config.javaPath);
+    m_bridgeJarEdit->setText(config.bridgeJar);
+    m_bridgeConfigEdit->setText(config.bridgeConfig);
+    m_pollIntervalEdit->setValue(config.pollIntervalMs);
+    m_staleTimeoutEdit->setValue(config.dataStaleTimeoutMs);
+    m_controlTimeoutEdit->setValue(config.controlTimeoutMs);
+    m_bridgeRestartEdit->setValue(config.bridgeRestartIntervalMs);
+    m_mockModeEdit->setChecked(config.mockMode);
+    m_autoStartBridgeEdit->setChecked(config.autoStartBridge);
+}
+
+void MainWindow::initializeStore()
+{
+    const QString databasePath = QDir(QApplication::applicationDirPath())
+            .filePath(QStringLiteral("data/verticare.db"));
+    if (!m_store.open(databasePath)) {
+        if (m_storeStatus)
+            m_storeStatus->setText(QStringLiteral("本地存储不可用"));
+        appendEvent(QStringLiteral("storage"), QStringLiteral("warning"),
+                    QStringLiteral("SQLite本地存储初始化失败"), false);
+        return;
+    }
+
+    if (m_storeStatus)
+        m_storeStatus->setText(QStringLiteral("本地存储已启用"));
+
+    QJsonObject lastTelemetry;
+    if (m_store.loadLastTelemetry(&lastTelemetry)) {
+        applyTelemetry(lastTelemetry);
+        setConnectionState(false, QStringLiteral("显示本地最后数据"), "#ffb85c");
+    }
+
+    if (m_eventList) {
+        const QStringList history = m_store.loadRecentEvents(12);
+        for (auto it = history.crbegin(); it != history.crend(); ++it) {
+            QListWidgetItem *item = new QListWidgetItem(*it);
+            item->setForeground(QColor("#8dd9e2"));
+            m_eventList->insertItem(0, item);
+        }
+    }
+    reloadTrendPage();
+}
+
+void MainWindow::reloadTrendPage()
+{
+    if (m_trendChart)
+        m_trendChart->setSamples(m_store.loadRecentSamples(30));
 }
 
 void MainWindow::refreshTelemetry()
@@ -678,6 +1033,13 @@ void MainWindow::sendControl()
 
 void MainWindow::applyTelemetry(const QJsonObject &telemetry)
 {
+    if (m_store.isOpen()) {
+        m_store.saveTelemetry(telemetry);
+        reloadTrendPage();
+        if (m_storeStatus)
+            m_storeStatus->setText(QStringLiteral("已保存到本地"));
+    }
+
     if (telemetry.contains("temperature"))
         setMetric("temperature", QString::number(telemetry.value("temperature").toDouble(), 'f', 1));
     if (telemetry.contains("airHumidity"))
@@ -849,6 +1211,58 @@ void MainWindow::handleControlFinished(bool ok, const QString &message)
                                       : "color: #ff806f;");
 }
 
+void MainWindow::exportCsv()
+{
+    if (!m_store.isOpen()) {
+        QMessageBox::warning(this, QStringLiteral("导出失败"),
+                             QStringLiteral("本地SQLite数据库未启用"));
+        return;
+    }
+
+    const QString path = QFileDialog::getSaveFileName(
+                this, QStringLiteral("导出CSV"),
+                QDir::home().filePath(QStringLiteral("verticare_telemetry.csv")),
+                QStringLiteral("CSV Files (*.csv)"));
+    if (path.isEmpty())
+        return;
+
+    if (m_store.exportCsv(path)) {
+        QMessageBox::information(this, QStringLiteral("导出完成"),
+                                 QStringLiteral("数据已导出到：\n%1").arg(path));
+    } else {
+        QMessageBox::warning(this, QStringLiteral("导出失败"),
+                             QStringLiteral("无法写入CSV文件"));
+    }
+}
+
+void MainWindow::saveSettings()
+{
+    OneNetConfig config = m_client.config();
+    config.productId = m_productIdEdit->text().trimmed();
+    config.deviceName = m_deviceNameEdit->text().trimmed();
+    config.productAccessKey = m_accessKeyEdit->text().trimmed();
+    config.javaPath = m_javaPathEdit->text().trimmed();
+    config.bridgeJar = m_bridgeJarEdit->text().trimmed();
+    config.bridgeConfig = m_bridgeConfigEdit->text().trimmed();
+    config.pollIntervalMs = m_pollIntervalEdit->value();
+    config.dataStaleTimeoutMs = m_staleTimeoutEdit->value();
+    config.controlTimeoutMs = m_controlTimeoutEdit->value();
+    config.bridgeRestartIntervalMs = m_bridgeRestartEdit->value();
+    config.mockMode = m_mockModeEdit->isChecked();
+    config.autoStartBridge = m_autoStartBridgeEdit->isChecked();
+
+    m_client.stopBridge();
+    m_client.setConfig(config);
+    m_pollTimer.start(config.pollIntervalMs);
+    const bool saved = m_client.saveConfig(configPath());
+    if (m_settingsStatus)
+        m_settingsStatus->setText(saved ? QStringLiteral("已保存并应用")
+                                        : QStringLiteral("保存失败"));
+    if (config.autoStartBridge && !config.mockMode)
+        m_client.startBridge();
+    refreshTelemetry();
+}
+
 void MainWindow::setControlBusy(bool busy)
 {
     for (QPushButton *button : {m_applyButton, m_openButton, m_closeButton}) {
@@ -878,10 +1292,13 @@ QJsonObject MainWindow::controlParamsFromUi() const
 }
 
 void MainWindow::appendEvent(const QString &type, const QString &level,
-                             const QString &message)
+                             const QString &message, bool persist)
 {
     if (!m_eventList)
         return;
+
+    if (persist && m_store.isOpen())
+        m_store.saveEvent(type, level, message);
 
     const QString text = QStringLiteral("%1  %2  %3")
             .arg(QDateTime::currentDateTime().toString("HH:mm:ss"),

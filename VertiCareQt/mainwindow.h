@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "onenetclient.h"
+#include "telemetrystore.h"
 
 #include <QJsonObject>
 #include <QDateTime>
@@ -12,10 +13,13 @@
 
 class QCheckBox;
 class QDoubleSpinBox;
+class QLineEdit;
 class QListWidget;
 class QRadioButton;
 class QPushButton;
+class QSpinBox;
 class PlantSceneWidget;
+class TrendChartWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -30,6 +34,8 @@ private slots:
     void applyTelemetry(const QJsonObject &telemetry);
     void updateFreshness();
     void handleControlFinished(bool ok, const QString &message);
+    void exportCsv();
+    void saveSettings();
 
 private:
     void buildUi();
@@ -37,8 +43,13 @@ private:
                              const QString &unit, const QString &accent);
     QWidget *buildControlPanel();
     QWidget *buildEventPage();
+    QWidget *buildTrendPage();
+    QWidget *buildSettingsPage();
+    void loadSettingsToUi();
+    void initializeStore();
+    void reloadTrendPage();
     void appendEvent(const QString &type, const QString &level,
-                     const QString &message);
+                     const QString &message, bool persist = true);
     void setMetric(const QString &key, const QString &value);
     void setConnectionState(bool online, const QString &message,
                             const QString &color = QString());
@@ -48,6 +59,7 @@ private:
 
 private:
     OneNetClient m_client;
+    TelemetryStore m_store;
     QTimer m_pollTimer;
     QTimer m_healthTimer;
     QMap<QString, QLabel *> m_metrics;
@@ -59,6 +71,8 @@ private:
     QLabel *m_modeBadge = nullptr;
     QLabel *m_commandStatus = nullptr;
     QListWidget *m_eventList = nullptr;
+    TrendChartWidget *m_trendChart = nullptr;
+    QLabel *m_storeStatus = nullptr;
 
     QRadioButton *m_autoMode = nullptr;
     QRadioButton *m_manualMode = nullptr;
@@ -68,6 +82,19 @@ private:
     QPushButton *m_applyButton = nullptr;
     QPushButton *m_openButton = nullptr;
     QPushButton *m_closeButton = nullptr;
+    QLineEdit *m_productIdEdit = nullptr;
+    QLineEdit *m_deviceNameEdit = nullptr;
+    QLineEdit *m_accessKeyEdit = nullptr;
+    QLineEdit *m_javaPathEdit = nullptr;
+    QLineEdit *m_bridgeJarEdit = nullptr;
+    QLineEdit *m_bridgeConfigEdit = nullptr;
+    QSpinBox *m_pollIntervalEdit = nullptr;
+    QSpinBox *m_staleTimeoutEdit = nullptr;
+    QSpinBox *m_controlTimeoutEdit = nullptr;
+    QSpinBox *m_bridgeRestartEdit = nullptr;
+    QCheckBox *m_mockModeEdit = nullptr;
+    QCheckBox *m_autoStartBridgeEdit = nullptr;
+    QLabel *m_settingsStatus = nullptr;
     QDateTime m_lastTelemetryAt;
     int m_lastEventSequence = 0;
     bool m_sensorHealthy = true;

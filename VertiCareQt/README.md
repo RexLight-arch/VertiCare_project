@@ -43,6 +43,7 @@ pollIntervalMs=3000
 dataStaleTimeoutMs=15000
 controlTimeoutMs=10000
 mockMode=false
+autoStartBridge=true
 ```
 
 Bridge配置参照 `VertiCareBridge/bridge.properties.example`。
@@ -52,6 +53,22 @@ Bridge配置参照 `VertiCareBridge/bridge.properties.example`。
 
 上位机会显示实时数据、数据超时和关键传感器异常状态；控制请求期间
 按钮会暂时锁定，并显示设备执行成功、失败或超时结果。
+
+## 本地数据
+
+v1.6开始，上位机会把收到的遥测数据保存到本地SQLite数据库：
+
+```text
+程序运行目录/data/verticare.db
+```
+
+趋势页显示最近30分钟的温度、湿度、亮度和通风指数；点击“导出CSV”
+可以导出最近最多5000条遥测记录。OneNet暂时断线时，Qt启动后会优先显示
+SQLite中的最后一条历史数据，并在重新收到OneNet数据后自动刷新为实时状态。
+
+“设置”页可以修改产品ID、设备名、Access Key、Bridge路径、轮询周期、
+超时时间、演示模式和开机自动启动Bridge。保存后会写入运行目录下的
+`config.ini`，并立即应用当前配置。
 
 ## 相关文档
 

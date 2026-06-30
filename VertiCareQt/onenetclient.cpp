@@ -90,6 +90,8 @@ bool OneNetClient::loadConfig(const QString &path)
     next.controlTimeoutMs = settings.value(
                 "ui/controlTimeoutMs", 10000).toInt();
     next.mockMode = settings.value("ui/mockMode", true).toBool();
+    next.autoStartBridge = settings.value(
+                "ui/autoStartBridge", true).toBool();
     setConfig(next);
     return true;
 }
@@ -111,6 +113,7 @@ bool OneNetClient::saveConfig(const QString &path) const
     settings.setValue("ui/dataStaleTimeoutMs", m_config.dataStaleTimeoutMs);
     settings.setValue("ui/controlTimeoutMs", m_config.controlTimeoutMs);
     settings.setValue("ui/mockMode", m_config.mockMode);
+    settings.setValue("ui/autoStartBridge", m_config.autoStartBridge);
     settings.sync();
     return settings.status() == QSettings::NoError;
 }

@@ -18,3 +18,4 @@ pollIntervalMs=3000
 dataStaleTimeoutMs=15000
 controlTimeoutMs=10000
 mockMode=true
+autoStartBridge=true

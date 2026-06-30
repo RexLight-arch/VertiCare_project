@@ -24,6 +24,7 @@ struct OneNetConfig
     int bridgeRestartIntervalMs = 5000;
     int controlTimeoutMs = 10000;
     bool mockMode = true;
+    bool autoStartBridge = true;
 };
 
 class OneNetClient : public QObject
