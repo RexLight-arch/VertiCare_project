@@ -1,78 +1,184 @@
-# VertiCare 垂直绿化管家
+# VertiCare
 
-基于 ESP32-C6、OneNet 和 Qt 的垂直绿化监测与灌溉控制课程设计。
+VertiCare is an IoT-based vertical greening management system built on
+ESP32-C6, OneNet, Java Bridge, and a Qt desktop dashboard. It collects
+environmental data from a plant wall, reports telemetry to the cloud, detects
+safety and maintenance events, and supports remote irrigation control.
 
-## Demo 功能
+## What It Does
 
-- DHT11采集环境温度和空气湿度
-- 光敏电阻采集环境亮度
-- MH-RD雨滴模块检测雨水，并进行自动干燥基线校准
-- SW-420通过GPIO中断捕获振动，按连续活动窗口判断维护状态
-- MQ-135监测空气质量趋势
-- 火焰传感器和SW-520D倾斜传感器提供安全告警
-- RC522 RFID和TTP223提供维护人员录入、认证和本地触摸交互
-- SG90模拟滴灌阀门
-- ESP32-C6通过MQTT向OneNet上报物模型属性
-- OneNet服务端订阅通过Pulsar向Java Bridge推送数据
-- Qt上位机显示实时状态，并通过OneNet HTTP API控制设备
-- 支持自动灌溉、手动灌溉和远程阈值设置
-- 支持关键传感器健康检测、断线自动恢复和Qt数据超时提示
-- 支持告警事件生成、事件冷却和Qt事件中心展示
+- Monitors temperature, humidity, light, rain, vibration, air quality, flame,
+  tilt, and RFID maintenance status.
+- Uploads device telemetry to OneNet through MQTT OneJSON property reports.
+- Receives cloud-to-device commands through OneNet property setting messages.
+- Uses a Java Bridge to consume OneNet service-side subscription messages and
+  forward normalized JSON data to the Qt dashboard.
+- Provides a Qt 5 desktop dashboard for live monitoring, irrigation control,
+  RFID status, event history, trend charts, settings, and CSV export.
+- Stores telemetry and events locally with SQLite so the dashboard can show the
+  last known data when cloud data is temporarily unavailable.
 
-## 项目结构
-
-```text
-VertiCareDemo/     ESP32-C6 Arduino固件和OneNet物模型
-VertiCareBridge/   OneNet Pulsar消息接收、验签和解密服务
-VertiCareQt/       Qt 5.12上位机
-docs/              最终接线、答辩演示流程和常见问题排查
-```
-
-## 通信架构
+## System Architecture
 
 ```text
-ESP32 -> OneNet MQTT -> 服务端订阅 -> Pulsar -> Java Bridge -> Qt
-Qt -> OneNet HTTP API -> OneNet MQTT -> ESP32
+ESP32-C6
+  -> MQTT OneJSON property report
+  -> OneNet thing model
+  -> OneNet service-side subscription
+  -> Java Bridge
+  -> Qt desktop dashboard
+
+Qt desktop dashboard
+  -> OneNet HTTP property set API
+  -> OneNet MQTT property set message
+  -> ESP32-C6
 ```
 
-## 快速开始
+The ESP32-C6 and the Qt dashboard do not communicate directly. OneNet acts as
+the cloud relay for both telemetry and control commands.
 
-1. 复制 `VertiCareDemo/config.h.example` 为 `config.h`，填写WiFi和设备Token。
-2. 在OneNet导入 `VertiCareDemo/onenet/verticare_thing_model_control.json`。
-3. 使用Arduino IDE选择ESP32-C6开发板并烧录固件。
-4. 将 `VertiCareBridge/bridge.properties.example` 复制为
-   `bridge.properties`，填写消费组信息。
-5. 构建Bridge：
+## Main Components
+
+```text
+VertiCareDemo/      ESP32-C6 Arduino firmware and OneNet thing model
+VertiCareBridge/    Java bridge for OneNet service-side subscription messages
+VertiCareQt/        Qt 5.12 desktop dashboard
+docs/               Wiring, architecture notes, reports, slides, and assets
+```
+
+## Hardware Modules
+
+Current firmware supports the following modules:
+
+- ESP32-C6 development board
+- DHT11 temperature and humidity sensor
+- Photoresistor light sensor
+- MH-RD rain sensor module
+- SW-420 vibration sensor
+- MQ-135 air quality sensor
+- Flame sensor
+- SW-520D tilt sensor
+- RC522 RFID module
+- TTP223 capacitive touch sensor
+- SG90 servo
+
+See [docs/FINAL_WIRING.md](docs/FINAL_WIRING.md) for the detailed wiring table.
+
+## Software Stack
+
+| Layer | Technology |
+| --- | --- |
+| Device firmware | Arduino IDE, ESP32 Arduino Core |
+| Cloud platform | OneNet thing model, MQTT OneJSON, HTTP property set API |
+| Subscription bridge | Java, Maven, OneNet Pulsar service subscription |
+| Desktop dashboard | Qt 5.12.9 MinGW 64-bit |
+| Local storage | SQLite |
+
+## Quick Start
+
+### 1. Configure OneNet
+
+Import the thing model:
+
+```text
+VertiCareDemo/onenet/verticare_thing_model_control.json
+```
+
+Create a OneNet product device, enable MQTT access, and configure a
+service-side subscription for telemetry forwarding.
+
+### 2. Configure and Flash the ESP32-C6 Firmware
+
+Copy the firmware configuration template:
+
+```powershell
+Copy-Item VertiCareDemo/config.h.example VertiCareDemo/config.h
+```
+
+Edit `VertiCareDemo/config.h` with Wi-Fi credentials, OneNet product
+information, device name, and MQTT token. Then open
+`VertiCareDemo/VertiCareDemo.ino` in Arduino IDE and flash it to the ESP32-C6.
+
+### 3. Build the Java Bridge
+
+Copy the bridge configuration template:
+
+```powershell
+Copy-Item VertiCareBridge/bridge.properties.example VertiCareBridge/bridge.properties
+```
+
+Fill in the OneNet consumer group, subscription, product, and device settings.
+Then build the bridge:
 
 ```powershell
 mvn -f VertiCareBridge/pom.xml -DskipTests package
 ```
 
-6. 使用Qt Creator打开 `VertiCareQt/VertiCareQt.pro`。
-7. 将 `VertiCareQt/config.ini.example` 复制到程序运行目录并命名为
-   `config.ini`，填写产品Access Key，将 `mockMode` 设置为 `false`。
+### 4. Run the Qt Dashboard
 
-真实配置文件均已加入 `.gitignore`，不要将密钥提交到GitHub。
+Open the Qt project:
 
-## 答辩资料
+```text
+VertiCareQt/VertiCareQt.pro
+```
 
-- [最终硬件接线表](docs/FINAL_WIRING.md)
-- [答辩演示流程](docs/DEMO_SCRIPT.md)
-- [常见问题排查](docs/TROUBLESHOOTING.md)
-- [OneNet通信架构说明](docs/ONENET_ARCHITECTURE.md)
-- [最终验收清单](docs/ACCEPTANCE_CHECKLIST.md)
-- [发布说明](docs/RELEASE_NOTES.md)
-- [GitHub提交指南](docs/GITHUB_SUBMISSION.md)
+Build it with Qt 5.12.9 MinGW 64-bit. Copy the dashboard configuration template
+to the application runtime directory:
 
-建议现场演示顺序：启动自检、自动灌溉、雨滴抑制、RFID授权维护、
-未授权维护告警、火焰/倾斜安全告警、Qt事件中心汇总。
+```powershell
+Copy-Item VertiCareQt/config.ini.example path\to\runtime\config.ini
+```
 
-## 已验证环境
+Set `mockMode=false`, fill in the OneNet product information, and set
+`autoStartBridge=true` if the dashboard should launch the Java Bridge
+automatically.
+
+## Runtime Files
+
+The application expects these runtime files when running outside Qt Creator:
+
+```text
+VertiCareQt.exe
+config.ini
+bridge/
+  verticare-bridge.jar
+  bridge.properties
+sqldrivers/
+  qsqlite.dll
+```
+
+For a packaged Windows build, use Qt `windeployqt` and verify that the SQLite
+driver exists under `sqldrivers/`.
+
+## Configuration Safety
+
+The real configuration files are intentionally ignored by Git:
+
+- `VertiCareDemo/config.h`
+- `VertiCareBridge/bridge.properties`
+- `VertiCareQt/config.ini`
+
+Do not commit Wi-Fi credentials, OneNet access keys, MQTT tokens, device
+secrets, or consumer group keys.
+
+## Documentation
+
+- [Wiring](docs/FINAL_WIRING.md)
+- [OneNet Architecture](docs/ONENET_ARCHITECTURE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Acceptance Checklist](docs/ACCEPTANCE_CHECKLIST.md)
+- [Release Notes](docs/RELEASE_NOTES.md)
+- [GitHub Submission Notes](docs/GITHUB_SUBMISSION.md)
+
+## Verified Environment
 
 ```text
 ESP32 Arduino Core 3.2.0
+Arduino IDE
+Qt Creator 4.12.2
 Qt 5.12.9 MinGW 64-bit
 JDK 8
 Maven 3.9.16
 OneNet OneJSON
 ```
+
